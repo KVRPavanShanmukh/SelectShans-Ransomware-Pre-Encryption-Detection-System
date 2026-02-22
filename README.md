@@ -98,6 +98,12 @@ frontend/
 
 
 ---
+**Note:
+A ---> Our Git Project
+B ---> Your Own Encryption Project(File renames are must --> demo version for our A)
+Before trying A directly on files, ensure that you have a small Java based or Python based program of B. Then you can use this A in that particular file directory of B, to check how A is working.
+Clear!!!! Now try it.**
+
 
 ## ⚙️ Installation & Setup
 
@@ -165,22 +171,16 @@ Real-time dashboard risk analytics
 To detect ransomware behavior during its early operational stage
 and prevent large-scale file encryption damage.
 
-👨‍💻 Author
-
-Shanmukh
+👨‍💻 Author : Kakarla Sai Pavan Shanmukh
 
 📌 Disclaimer
 
-This project is developed for educational and research purposes only.
+**This project is developed for educational and research purposes only.**
 
 
 ---
-
 If you want, I can now:
-
-- Add GitHub badges  
-- Add screenshots section  
-- Add demo GIF section  
+- Add GitHub badges
 - Make it look more enterprise-level  
 - Add contribution guidelines  
 
