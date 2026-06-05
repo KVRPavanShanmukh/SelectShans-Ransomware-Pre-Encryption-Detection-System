@@ -1,21 +1,244 @@
-import React, { useState } from 'react';
-import { Settings as SettingsIcon, Shield, Bell, Eye, Database, Lock, Download } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Settings as SettingsIcon, Shield, Bell, Eye, Database, Lock, Download, Trash2, User, FileText, Activity } from 'lucide-react';
 
-const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000' }) => {
+const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, onNavigate }) => {
     const [telemetry, setTelemetry] = useState(false);
     const [remoteSupport, setRemoteSupport] = useState(false);
     const [autoUpdate, setAutoUpdate] = useState(true);
     const [emailAlerts, setEmailAlerts] = useState(true);
     const [dataRetention, setDataRetention] = useState('30');
+    const [showAdminMenu, setShowAdminMenu] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+    const [messageType, setMessageType] = useState('success');
+    const messageTimeoutRef = useRef(null);
+
+    useEffect(() => {
+        // Auto-fade message after 4 seconds
+        if (message) {
+            if (messageTimeoutRef.current) {
+                clearTimeout(messageTimeoutRef.current);
+            }
+            messageTimeoutRef.current = setTimeout(() => {
+                setMessage('');
+                setMessageType('success');
+            }, 4000);
+        }
+        return () => {
+            if (messageTimeoutRef.current) {
+                clearTimeout(messageTimeoutRef.current);
+            }
+        };
+    }, [message]);
+
+    const handleLogRetentionChange = async (e) => {
+        const days = e.target.value;
+        setDataRetention(days);
+        setLoading(true);
+        
+        try {
+            const response = await fetch(`${apiBase}/api/admin/log-retention`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, days: parseInt(days) })
+            });
+            
+            if (response.ok) {
+                setMessage('Log retention updated successfully');
+                setMessageType('success');
+            } else {
+                setMessage('Failed to update log retention');
+                setMessageType('error');
+            }
+        } catch (error) {
+            console.error('Error updating log retention:', error);
+            setMessage('Error updating log retention');
+            setMessageType('error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleClearAllData = async () => {
+        if (!window.confirm('Are you sure you want to permanently erase all data? This cannot be undone.')) {
+            return;
+        }
+        
+        setLoading(true);
+        try {
+            const response = await fetch(`${apiBase}/api/admin/clear-data`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            });
+            
+            if (response.ok) {
+                setMessage('All data cleared successfully');
+                setMessageType('success');
+            } else {
+                setMessage('Failed to clear data');
+                setMessageType('error');
+            }
+        } catch (error) {
+            console.error('Error clearing data:', error);
+            setMessage('Error clearing data');
+            setMessageType('error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleProfileSettings = () => {
+        if (onNavigate) {
+            onNavigate('profile-settings');
+        }
+        setShowAdminMenu(false);
+    };
+
+    const handleViewAuditLog = () => {
+        if (onNavigate) {
+            onNavigate('audit-log');
+        }
+        setShowAdminMenu(false);
+    };
+
+    const handleSystemHealth = () => {
+        if (onNavigate) {
+            onNavigate('system-health');
+        }
+        setShowAdminMenu(false);
+    };
 
     return (
         <div className="dashboard-wrapper">
+            {message && (
+                <div style={{
+                    position: 'fixed',
+                    top: 20,
+                    right: 20,
+                    background: messageType === 'success' ? '#10b981' : '#ef4444',
+                    color: '#fff',
+                    padding: '12px 20px',
+                    borderRadius: 4,
+                    zIndex: 1000,
+                    animation: 'fadeInOut 4s ease-in-out forwards',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}>
+                    <style>{`
+                        @keyframes fadeInOut {
+                            0% { opacity: 1; transform: translateY(0); }
+                            85% { opacity: 1; transform: translateY(0); }
+                            100% { opacity: 0; transform: translateY(-10px); }
+                        }
+                    `}</style>
+                    {message}
+                </div>
+            )}
+
             <div className="card" style={{ maxWidth: 800, margin: '0 auto' }}>
                 <div className="header-flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 16, marginBottom: 24 }}>
                     <h2 style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '1.2rem', color: '#f8fafc' }}>
                         <SettingsIcon size={24} color="#007CC3" />
                         System Preferences
                     </h2>
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setShowAdminMenu(!showAdminMenu)}
+                            style={{
+                                background: '#007CC3',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '8px 16px',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8
+                            }}
+                        >
+                            <Shield size={18} />
+                            ADMIN
+                        </button>
+                        
+                        {showAdminMenu && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                background: '#1e293b',
+                                border: '1px solid #334155',
+                                borderRadius: 4,
+                                marginTop: 8,
+                                minWidth: 220,
+                                zIndex: 1000,
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                            }}>
+                                <button
+                                    onClick={handleProfileSettings}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#e2e8f0',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        borderBottom: '1px solid #334155',
+                                        fontSize: '0.9rem'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = 'rgba(7, 124, 195, 0.2)'}
+                                    onMouseLeave={(e) => e.target.style.background = 'none'}
+                                >
+                                    <User size={16} /> Profile Settings
+                                </button>
+                                <button
+                                    onClick={handleViewAuditLog}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#e2e8f0',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        borderBottom: '1px solid #334155',
+                                        fontSize: '0.9rem'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = 'rgba(7, 124, 195, 0.2)'}
+                                    onMouseLeave={(e) => e.target.style.background = 'none'}
+                                >
+                                    <FileText size={16} /> View Audit Log
+                                </button>
+                                <button
+                                    onClick={handleSystemHealth}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#e2e8f0',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        fontSize: '0.9rem'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = 'rgba(7, 124, 195, 0.2)'}
+                                    onMouseLeave={(e) => e.target.style.background = 'none'}
+                                >
+                                    <Activity size={16} /> System Health
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -227,7 +450,7 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000' }) => {
                         </div>
                     </section>
 
-                    {/* Data Section */}
+                    {/* Data Management Section */}
                     <section>
                         <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', color: '#94a3b8', marginBottom: 16 }}>
                             <Database size={18} />
@@ -241,7 +464,8 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000' }) => {
                                 </div>
                                 <select
                                     value={dataRetention}
-                                    onChange={(e) => setDataRetention(e.target.value)}
+                                    onChange={handleLogRetentionChange}
+                                    disabled={loading}
                                     style={{
                                         background: '#1e293b',
                                         color: '#e2e8f0',
@@ -249,7 +473,8 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000' }) => {
                                         padding: '6px 12px',
                                         borderRadius: 4,
                                         outline: 'none',
-                                        cursor: 'pointer'
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        opacity: loading ? 0.6 : 1
                                     }}
                                 >
                                     <option value="7">7 Days</option>
@@ -266,20 +491,24 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000' }) => {
                                     <h4 style={{ fontSize: '0.95rem', color: '#ef4444', marginBottom: 4 }}>Clear All Data</h4>
                                     <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Permanently erase all quarantined files and system logs. Cannot be undone.</p>
                                 </div>
-                                <button style={{
-                                    background: 'none',
-                                    border: '1px solid #ef4444',
-                                    color: '#ef4444',
-                                    padding: '6px 16px',
-                                    borderRadius: 4,
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    fontSize: '0.85rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8
-                                }}>
-                                    <Lock size={14} /> PURGE
+                                <button 
+                                    onClick={handleClearAllData}
+                                    disabled={loading}
+                                    style={{
+                                        background: 'none',
+                                        border: '1px solid #ef4444',
+                                        color: '#ef4444',
+                                        padding: '6px 16px',
+                                        borderRadius: 4,
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontWeight: 600,
+                                        fontSize: '0.85rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        opacity: loading ? 0.6 : 1
+                                    }}>
+                                    <Trash2 size={14} /> PURGE
                                 </button>
                             </div>
                         </div>

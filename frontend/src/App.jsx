@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import FileUploader from './components/FileUploader';
@@ -6,21 +6,92 @@ import SysmonLogs from './components/SysmonLogs';
 import ActiveShield from './components/ActiveShield';
 import EncryptionLab from './components/EncryptionLab';
 import Settings from './components/Settings';
+import ProfileSettings from './components/ProfileSettings';
+import AuditLog from './components/AuditLog';
+import SystemHealth from './components/SystemHealth';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [adminTab, setAdminTab] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const [logsUploaded, setLogsUploaded] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [jwtToken, setJwtToken] = useState(null);
+  const [tokenRefreshInterval, setTokenRefreshInterval] = useState(null);
 
-  const handleLogout = () => setIsAuthenticated(false);
+  // Check for persisted session on app load
+  useEffect(() => {
+    const storedToken = localStorage.getItem('jwtToken');
+    const storedUserId = localStorage.getItem('userId');
+    
+    if (storedToken && storedUserId) {
+      setJwtToken(storedToken);
+      setUserId(parseInt(storedUserId));
+      setIsAuthenticated(true);
+      startTokenRefreshTimer(storedToken);
+    }
+  }, []);
+
+  // Refresh token before expiry (30 min token, refresh at 25 min)
+  const startTokenRefreshTimer = (token) => {
+    const refreshInterval = setInterval(async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/token/refresh', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const newToken = data.token;
+          localStorage.setItem('jwtToken', newToken);
+          setJwtToken(newToken);
+        } else {
+          // Token invalid, need to re-login
+          handleLogout();
+        }
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+      }
+    }, 25 * 60 * 1000); // Refresh every 25 minutes
+    
+    setTokenRefreshInterval(refreshInterval);
+  };
+
+  const handleLogin = (userId, token) => {
+    localStorage.setItem('jwtToken', token);
+    localStorage.setItem('userId', userId);
+    setUserId(userId);
+    setJwtToken(token);
+    setIsAuthenticated(true);
+    startTokenRefreshTimer(token);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('jwtToken');
+    localStorage.removeItem('userId');
+    setJwtToken(null);
+    setUserId(null);
+    setIsAuthenticated(false);
+    if (tokenRefreshInterval) {
+      clearInterval(tokenRefreshInterval);
+    }
+  };
+  
+  const handleAdminNavigation = (adminPage) => {
+    setAdminTab(adminPage);
+  };
 
   if (!isAuthenticated && !isSignup) {
-    return <Login onLogin={() => setIsAuthenticated(true)} onSwitchToSignup={() => setIsSignup(true)} />;
+    return <Login onLogin={handleLogin} onSwitchToSignup={() => setIsSignup(true)} />;
   }
 
   if (!isAuthenticated && isSignup) {
@@ -62,6 +133,10 @@ function App() {
               }}>
                 <div
                   style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', borderBottom: '1px solid rgba(0,255,65,0.1)' }}
+                  onClick={() => {
+                    handleAdminNavigation('profile-settings');
+                    setShowProfileMenu(false);
+                  }}
                   onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
                   onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
                 >
@@ -69,6 +144,10 @@ function App() {
                 </div>
                 <div
                   style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', borderBottom: '1px solid rgba(0,255,65,0.1)' }}
+                  onClick={() => {
+                    handleAdminNavigation('audit-log');
+                    setShowProfileMenu(false);
+                  }}
                   onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
                   onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
                 >
@@ -76,6 +155,10 @@ function App() {
                 </div>
                 <div
                   style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  onClick={() => {
+                    handleAdminNavigation('system-health');
+                    setShowProfileMenu(false);
+                  }}
                   onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
                   onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
                 >
@@ -87,12 +170,16 @@ function App() {
         </header>
 
         <div className="main-view">
-          {activeTab === 'dashboard' && <Dashboard logsUploaded={logsUploaded} />}
-          {activeTab === 'upload' && <FileUploader onLogsUploaded={() => setLogsUploaded(true)} />}
-          {activeTab === 'logs' && <SysmonLogs />}
-          {activeTab === 'protection' && <ActiveShield />}
-          {activeTab === 'encryption' && <EncryptionLab />}
-          {activeTab === 'settings' && <Settings />}
+          {!adminTab && activeTab === 'dashboard' && <Dashboard logsUploaded={logsUploaded} />}
+          {!adminTab && activeTab === 'upload' && <FileUploader onLogsUploaded={() => setLogsUploaded(true)} />}
+          {!adminTab && activeTab === 'logs' && <SysmonLogs />}
+          {!adminTab && activeTab === 'protection' && <ActiveShield />}
+          {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
+          {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase="http://127.0.0.1:5000" onNavigate={handleAdminNavigation} />}
+          
+          {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
+          {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
+          {adminTab === 'system-health' && <SystemHealth userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
         </div>
       </main>
     </div>

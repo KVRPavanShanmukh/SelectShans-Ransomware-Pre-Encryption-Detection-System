@@ -76,6 +76,58 @@ CREATE TABLE IF NOT EXISTS alerts (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Admin Settings (Log retention, etc)
+CREATE TABLE IF NOT EXISTS admin_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    log_retention_days INT DEFAULT 30,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Audit Log (Track system events)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id VARCHAR(100),
+    description TEXT,
+    ip_address VARCHAR(50),
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- User Profiles
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    full_name VARCHAR(255),
+    phone VARCHAR(20),
+    organization VARCHAR(255),
+    notification_email VARCHAR(100),
+    profile_data JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- System Health Snapshots
+CREATE TABLE IF NOT EXISTS system_health_snapshots (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    cpu_usage DECIMAL(5,2),
+    memory_usage DECIMAL(5,2),
+    disk_usage DECIMAL(5,2),
+    active_processes INT,
+    active_alerts INT,
+    threat_level VARCHAR(20),
+    health_score INT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Insert Default Admin (Password: password123, Answer to SQ1 "11": 11)
 -- Only run if table is empty
 INSERT IGNORE INTO users (username, password_hash, email, sec_q, sec_a_hash)

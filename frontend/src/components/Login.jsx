@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Lock, User, Mail, Key, ShieldCheck } from 'lucide-react';
 
 const Login = ({ onLogin, onSwitchToSignup }) => {
@@ -10,6 +10,24 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
   const [psk, setPsk] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const errorTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    // Auto-fade error after 4 seconds
+    if (error) {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      errorTimeoutRef.current = setTimeout(() => {
+        setError('');
+      }, 4000);
+    }
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, [error]);
 
   // STEP 1 — Submit Credentials
   const submitCredentials = async (e) => {
@@ -60,11 +78,12 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
       const data = await response.json();
 
       if (response.ok) {
-        // 🔥 Store detector token
+        // Store tokens
         localStorage.setItem("detector_token", data.detector_token);
         localStorage.setItem("user_role", data.role);
-
-        onLogin(data.role);
+        
+        // Call onLogin with userId and JWT token
+        onLogin(data.user_id, data.token);
       } else {
         setError(data.error || 'Verification failed');
       }
@@ -73,6 +92,20 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
       setError('Server connection failed');
     }
 
+    setLoading(false);
+  };
+
+  // Google OAuth Login
+  const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      // In a real app, you would use Google's OAuth flow here
+      // For now, we'll show an implementation example
+      window.location.href = `http://127.0.0.1:5000/api/auth/google/callback`;
+    } catch {
+      setError('Google authentication failed');
+    }
     setLoading(false);
   };
 
@@ -110,10 +143,63 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
               />
             </div>
 
-            {error && <div className="login-error">{error}</div>}
+            {error && (
+              <div style={{
+                background: '#ef4444',
+                color: '#fff',
+                padding: '10px 15px',
+                borderRadius: 4,
+                marginBottom: 15,
+                fontSize: 14,
+                animation: 'fadeInOut 4s ease-in-out forwards'
+              }}>
+                <style>{`
+                  @keyframes fadeInOut {
+                    0% { opacity: 1; transform: translateY(0); }
+                    85% { opacity: 1; transform: translateY(0); }
+                    100% { opacity: 0; transform: translateY(-10px); }
+                  }
+                `}</style>
+                {error}
+              </div>
+            )}
 
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Processing...' : 'Send OTP & PSK'}
+            </button>
+            
+            <div style={{ 
+              textAlign: 'center', 
+              margin: '15px 0', 
+              display: 'flex', 
+              alignItems: 'center',
+              gap: 10
+            }}>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.2)' }}></div>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.2)' }}></div>
+            </div>
+            
+            <button 
+              type="button" 
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '10px 15px',
+                background: '#fff',
+                color: '#333',
+                border: 'none',
+                borderRadius: 4,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                opacity: loading ? 0.6 : 1
+              }}>
+              🔍 Sign in with Google
             </button>
           </form>
         )}
@@ -147,7 +233,26 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
               />
             </div>
 
-            {error && <div className="login-error">{error}</div>}
+            {error && (
+              <div style={{
+                background: '#ef4444',
+                color: '#fff',
+                padding: '10px 15px',
+                borderRadius: 4,
+                marginBottom: 15,
+                fontSize: 14,
+                animation: 'fadeInOut 4s ease-in-out forwards'
+              }}>
+                <style>{`
+                  @keyframes fadeInOut {
+                    0% { opacity: 1; transform: translateY(0); }
+                    85% { opacity: 1; transform: translateY(0); }
+                    100% { opacity: 0; transform: translateY(-10px); }
+                  }
+                `}</style>
+                {error}
+              </div>
+            )}
 
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Verifying...' : 'Complete Login'}

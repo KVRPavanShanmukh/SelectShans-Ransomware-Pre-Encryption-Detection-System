@@ -8,6 +8,7 @@ import json
 import io
 import zipfile
 import random
+import jwt
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,10 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from mysql.connector import pooling
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# JWT and utilities
+from jwt_utils import create_token, verify_token, refresh_token, token_required
+from admin_routes import register_admin_routes
 
 # PDF + Graph
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
@@ -64,6 +69,9 @@ pool = pooling.MySQLConnectionPool(
 )
 
 print("MySQL pool ready.")
+
+# Register admin routes
+register_admin_routes(app, pool)
 
 
 # =====================================================
@@ -230,15 +238,18 @@ def verify():
     cursor.close()
     conn.close()
 
-    token = create_detector_token(pending["user_id"], pending["email"])
+    detector_token = create_detector_token(pending["user_id"], pending["email"])
+    jwt_token = create_token(pending["user_id"], pending["username"], pending["email"])
     del _pending_logins[identifier]
 
     return jsonify({
         "message": "Login successful",
-        "detector_token": token,
+        "token": jwt_token,
+        "detector_token": detector_token,
+        "user_id": pending["user_id"],
         "username": pending["username"],
         "email": pending["email"],
-        "user_id": pending["user_id"]
+        "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
 
 
@@ -492,6 +503,119 @@ def send_daily_summary():
 
     cursor.close()
     conn.close()
+
+
+# =====================================================
+# TOKEN MANAGEMENT ENDPOINTS
+# =====================================================
+
+@app.route('/api/token/refresh', methods=['POST'])
+def refresh_jwt_token():
+    """Refresh JWT token to extend session"""
+    # Try to get token from Authorization header first, then from JSON
+    auth_header = request.headers.get('Authorization', '')
+    token = None
+    
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+    else:
+        data = request.get_json() or {}
+        token = data.get('token')
+    
+    if not token:
+        return jsonify({"error": "Token required"}), 400
+    
+    new_token = refresh_token(token)
+    if not new_token:
+        return jsonify({"error": "Token invalid or expired"}), 401
+    
+    return jsonify({
+        "token": new_token,
+        "expires_in": 30 * 60  # 30 minutes in seconds
+    }), 200
+
+
+# =====================================================
+# GOOGLE OAUTH ENDPOINTS
+# =====================================================
+
+@app.route('/api/auth/google', methods=['POST'])
+def google_auth():
+    """Google OAuth authentication endpoint"""
+    data = request.json
+    google_token = data.get('token')
+    
+    if not google_token:
+        return jsonify({"error": "Token required"}), 400
+    
+    try:
+        from google.auth.transport import requests
+        from google.oauth2 import id_token
+        
+        GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+        if not GOOGLE_CLIENT_ID:
+            return jsonify({"error": "Google OAuth not configured"}), 500
+        
+        idinfo = id_token.verify_oauth2_token(google_token, requests.Request(), GOOGLE_CLIENT_ID)
+        
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+        
+        google_id = idinfo['sub']
+        email = idinfo['email']
+        name = idinfo.get('name', '')
+        picture = idinfo.get('picture', '')
+        
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if user exists
+        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            # Create new user from Google info
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                email.split('@')[0] + '_' + google_id[:8],  # username
+                generate_password_hash(secrets.token_hex(16)),  # random password
+                email,
+                'Google OAuth User',
+                generate_password_hash('oauth')
+            ))
+            conn.commit()
+            cursor.execute("SELECT id, username, email FROM users WHERE email = %s", (email,))
+            user = cursor.fetchone()
+        
+        # Create JWT token
+        jwt_token = create_token(user['id'], user['username'], user['email'])
+        detector_token = create_detector_token(user['id'], user['email'])
+        
+        # Log the action
+        cursor.execute("""
+            INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)
+        """, (user['id'], 'GOOGLE_OAUTH_LOGIN', f'Google OAuth login: {email}'))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Google authentication successful",
+            "token": jwt_token,
+            "detector_token": detector_token,
+            "user_id": user['id'],
+            "username": user['username'],
+            "email": user['email'],
+            "name": name,
+            "picture": picture,
+            "expires_in": 30 * 60  # 30 minutes in seconds
+        }), 200
+        
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        return jsonify({"error": f"Authentication failed: {str(e)}"}), 401
 
 
 # =====================================================
