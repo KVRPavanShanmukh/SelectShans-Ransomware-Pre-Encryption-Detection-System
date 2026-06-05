@@ -53,8 +53,8 @@ dbconf = {
     "host": os.getenv("DB_HOST", "localhost"),
     "port": int(os.getenv("DB_PORT", 3306)),
     "user": os.getenv("DB_USER", "root"),
-    "password": os.getenv("DB_PASSWORD"),
-    "database": os.getenv("DB_NAME")
+    "password": "shanmukh@2006",
+    "database": "RANSOMWARE"
 }
 
 pool = pooling.MySQLConnectionPool(
@@ -102,14 +102,11 @@ def verify_detector_token(token):
 
 def send_email_safe(to_email, subject, body):
     try:
-        host = os.getenv("MAIL_HOST")
-        port = int(os.getenv("MAIL_PORT", 587))
-        user = os.getenv("MAIL_USER")
-        password = os.getenv("MAIL_PASS")
-
-        if not user or not password:
-            print("Email not configured.")
-            return False
+        # 🔥 Gmail SMTP Configuration
+        host = "smtp.gmail.com"
+        port = 587
+        user = "kakarlapavanshanmukh@gmail.com"
+        password = "apev evyg hkho nvvb"
 
         msg = MIMEMultipart()
         msg["From"] = user
@@ -117,19 +114,21 @@ def send_email_safe(to_email, subject, body):
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
+        print("Connecting to SMTP...")
         server = smtplib.SMTP(host, port)
         server.starttls()
         server.login(user, password)
+
+        print("Sending email to:", to_email)
         server.sendmail(user, to_email, msg.as_string())
         server.quit()
 
+        print("Email sent successfully!")
         return True
 
     except Exception as e:
-        print("Email error:", e)
-        print("SMTP ERROR:", e)
+        print("EMAIL ERROR:", str(e))
         return False
-
 
 # =====================================================
 # AUTH ROUTES
@@ -365,9 +364,10 @@ def upload_log():
     part.add_header("Content-Disposition", "attachment; filename=monitor.log")
     msg.attach(part)
 
-    server = smtplib.SMTP(os.getenv("MAIL_HOST"), int(os.getenv("MAIL_PORT", 587)))
+    server = smtplib.SMTP("smtp.gmail.com", 587)
     server.starttls()
-    server.login(os.getenv("MAIL_USER"), os.getenv("MAIL_PASS"))
+    server.login("yourgmail@gmail.com", "your_app_password_here")
+    
     server.sendmail(os.getenv("MAIL_USER"), info["email"], msg.as_string())
     server.quit()
 
@@ -458,9 +458,10 @@ def send_pdf_email(to_email, pdf_path):
 
     msg.attach(part)
 
-    server = smtplib.SMTP(os.getenv("MAIL_HOST"), int(os.getenv("MAIL_PORT", 587)))
+    server = smtplib.SMTP("smtp.gmail.com", 587)
     server.starttls()
-    server.login(os.getenv("MAIL_USER"), os.getenv("MAIL_PASS"))
+    server.login("yourgmail@gmail.com", "your_app_password_here")
+
     server.sendmail(os.getenv("MAIL_USER"), to_email, msg.as_string())
     server.quit()
 
