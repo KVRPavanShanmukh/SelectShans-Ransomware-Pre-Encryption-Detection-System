@@ -113,8 +113,8 @@ def send_email_safe(to_email, subject, body):
         # 🔥 Gmail SMTP Configuration
         host = "smtp.gmail.com"
         port = 587
-        user = "kakarlapavanshanmukh@gmail.com"
-        password = "apev evyg hkho nvvb"
+        user = "YOUR MAIL TO SEND MAILS"
+        password = "YOUR APP PASSWORD"
 
         msg = MIMEMultipart()
         msg["From"] = user
