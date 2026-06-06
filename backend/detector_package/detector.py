@@ -113,7 +113,7 @@ def start_monitor(path):
     observer.start()
 
     print("\n===================================")
-    print(" PRD-SYS FolderGuard Running")
+    print(" SentinelStream FolderGuard Running")
     print(" Monitoring:", path)
     print(" Logs stored in:", LOG_FILE)
     print(" Threshold:", RENAME_THRESHOLD)

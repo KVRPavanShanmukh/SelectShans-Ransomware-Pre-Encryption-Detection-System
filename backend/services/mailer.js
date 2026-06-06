@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 
 const sendAlertEmail = async (toEmail, message) => {
   await transporter.sendMail({
-    from: `"PRD-SYS" <${process.env.MAIL_USER}>`,
+    from: `"SentinelStream" <${process.env.MAIL_USER}>`,
     to: toEmail,   
     subject: "Ransomware Alert Detected",
     text: message,

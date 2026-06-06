@@ -104,7 +104,7 @@ const SysmonLogs = () => {
           <Database size={16} /> ABOUT SYSMON CORRELATION
         </h4>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
-          System Monitor (Sysmon) is a Windows system service that logs system activity to the Windows event log. PRD-SYS utilizes these logs to perform real-time behavioral analysis.
+          System Monitor (Sysmon) is a Windows system service that logs system activity to the Windows event log. SentinelStream utilizes these logs to perform real-time behavioral analysis.
         </p>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           By tracking specific Event IDs — such as <strong>Event ID 11 (FileCreate)</strong> for rapid file modification, or <strong>Event ID 1 (ProcessCreate)</strong> to track abnormal spawn trees — the Machine Learning engine can formulate an Anomaly Score indicating the likelihood of pre-encryption ransomware deployment.

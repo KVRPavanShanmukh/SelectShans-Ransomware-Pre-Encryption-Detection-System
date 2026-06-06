@@ -252,7 +252,7 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.95rem', color: '#e2e8f0', marginBottom: 4 }}>Telemetry Data Sharing</h4>
-                                    <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Help us improve PRD-SYS by sending anonymous usage data.</p>
+                                    <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Help us improve SentinelStream by sending anonymous usage data.</p>
                                 </div>
                                 <button
                                     className={`toggle-btn ${telemetry ? 'on' : 'off'}`}
@@ -286,7 +286,7 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.95rem', color: '#e2e8f0', marginBottom: 4 }}>Remote Support Access</h4>
-                                    <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Allow trusted PRD-SYS technicians to access this console for troubleshooting.</p>
+                                    <p style={{ fontSize: '0.8rem', color: '#64748b' }}>Allow trusted SentinelStream technicians to access this console for troubleshooting.</p>
                                 </div>
                                 <button
                                     className={`toggle-btn ${remoteSupport ? 'on' : 'off'}`}
@@ -399,11 +399,11 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                         </div>
                     </section>
 
-                    {/* PRD-SYS Folder Guard — Download detector */}
+                    {/* SentinelStream Folder Guard — Download detector */}
                     <section>
                         <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', color: '#94a3b8', marginBottom: 16 }}>
                             <Shield size={18} />
-                            PRD-SYS Folder Guard
+                            SentinelStream Folder Guard
                         </h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, background: 'rgba(0,0,0,0.2)', padding: 20, borderRadius: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -422,7 +422,7 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                                             const blob = await res.blob();
                                             const a = document.createElement('a');
                                             a.href = URL.createObjectURL(blob);
-                                            a.download = 'PRD-SYS-FolderGuard.zip';
+                                            a.download = 'SentinelStream-FolderGuard.zip';
                                             a.click();
                                             URL.revokeObjectURL(a.href);
                                         } catch (e) {
@@ -441,7 +441,7 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                                         fontSize: '0.85rem'
                                     }}
                                 >
-                                    <Download size={18} /> Download PRD-SYS Folder Guard
+                                    <Download size={18} /> Download SentinelStream Folder Guard
                                 </button>
                             </div>
                             {!detectorToken && (

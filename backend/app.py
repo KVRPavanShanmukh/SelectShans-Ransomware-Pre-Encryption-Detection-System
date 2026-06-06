@@ -47,7 +47,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-print("Starting PRD-SYS Backend...")
+print("Starting SentinelStream Backend...")
 
 
 # =====================================================
@@ -209,7 +209,7 @@ def login():
 
     send_email_safe(
         email,
-        "PRD-SYS Login",
+        "SentinelStream Login",
         f"OTP: {otp}\nPSK: {psk}\nValid for {OTP_EXPIRY} minutes."
     )
 
@@ -284,7 +284,7 @@ def detector_download():
         buffer,
         mimetype="application/zip",
         as_attachment=True,
-        download_name="PRD-SYS-FolderGuard.zip"
+        download_name="SentinelStream-FolderGuard.zip"
     )
 
 
@@ -328,9 +328,9 @@ def detector_log():
 
         send_email_safe(
             user_email,
-            "⚠ PRD-SYS ALERT: Mass File Rename Detected",
+            "⚠ SentinelStream ALERT: Mass File Rename Detected",
             f"""
-PRD-SYS detected suspicious file renaming activity.
+SentinelStream detected suspicious file renaming activity.
 
 Directory: {directory}
 Files Renamed: {count}
@@ -343,7 +343,7 @@ Recommended Actions:
 • Run full system scan
 
 Stay Secure,
-PRD-SYS Engine
+SentinelStream Engine
 """
         )
 
@@ -365,7 +365,7 @@ def upload_log():
     msg = MIMEMultipart()
     msg["From"] = os.getenv("MAIL_USER")
     msg["To"] = info["email"]
-    msg["Subject"] = "📁 PRD-SYS Log File Report"
+    msg["Subject"] = "📁 SentinelStream Log File Report"
 
     msg.attach(MIMEText("Attached is your detector log file.", "plain"))
 
@@ -426,7 +426,7 @@ def generate_pdf_report(user_id, user_email):
     elements = []
     styles = getSampleStyleSheet()
 
-    elements.append(Paragraph("PRD-SYS Daily Security Report", styles["Heading1"]))
+    elements.append(Paragraph("SentinelStream Daily Security Report", styles["Heading1"]))
     elements.append(Spacer(1, 12))
     elements.append(Paragraph(f"User: {user_email}", styles["Normal"]))
     elements.append(Spacer(1, 12))
@@ -455,7 +455,7 @@ def send_pdf_email(to_email, pdf_path):
     msg = MIMEMultipart()
     msg["From"] = os.getenv("MAIL_USER")
     msg["To"] = to_email
-    msg["Subject"] = "📊 PRD-SYS Daily Security Report"
+    msg["Subject"] = "📊 SentinelStream Daily Security Report"
 
     msg.attach(MIMEText("Attached is your daily security report.", "plain"))
 

@@ -1,4 +1,4 @@
-# PRD-SYS Phase 2 - Quick Reference Card
+# SentinelStream Phase 2 - Quick Reference Card
 
 ## 🎯 What Was Done
 

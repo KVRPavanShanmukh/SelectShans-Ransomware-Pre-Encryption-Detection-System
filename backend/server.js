@@ -29,7 +29,7 @@ db.query('SELECT 1')
         console.log('[SYS] Database connection established successfully.');
         // Start Server bound to IPv4 localhost explicitly
         app.listen(PORT, '127.0.0.1', () => {
-            console.log(`[SYS] PRD-SYS Backend running on http://127.0.0.1:${PORT}`);
+            console.log(`[SYS] SentinelStream Backend running on http://127.0.0.1:${PORT}`);
         });
     })
     .catch(err => {

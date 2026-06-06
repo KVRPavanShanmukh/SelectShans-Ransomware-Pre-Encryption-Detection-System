@@ -1,5 +1,5 @@
 """
-JWT and Session Management for PRD-SYS
+JWT and Session Management for SentinelStream
 """
 import jwt
 import os
@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, jsonify
 
-JWT_SECRET = os.getenv('JWT_SECRET', 'prd_sys_super_secret_jwt_key_2024')
+JWT_SECRET = os.getenv('JWT_SECRET', 'sentinelstream_super_secret_jwt_key_2024')
 JWT_ALGORITHM = 'HS256'
 TOKEN_EXPIRY_MINUTES = 30
 

@@ -42,7 +42,7 @@ router.post('/verify-sq', async (req, res) => {
         // Generate JWT
         const token = jwt.sign(
             { id: user.id, username: user.username },
-            process.env.JWT_SECRET || 'prd_sys_super_secret_jwt_key_2024',
+            process.env.JWT_SECRET || 'sentinelstream_super_secret_jwt_key_2024',
             { expiresIn: '8h' }
         );
 

@@ -1,4 +1,4 @@
--- PRD-SYS Database Schema
+-- SentinelStream Database Schema
 -- Run this in your MySQL client to set up the DB
 -- Database Name: RANSOMWARE
 
@@ -134,7 +134,7 @@ INSERT IGNORE INTO users (username, password_hash, email, sec_q, sec_a_hash)
 VALUES (
     'admin',
     '$2a$10$wT.M2O58U/mI/z170A.X4.sYhYyA3F5326hY212Z6pP.8u9tO7R86', -- password123
-    'admin@prd-sys.local',
+    'admin@sentinelstream.local',
     'What is the Event ID for FileCreate in Sysmon?',
     '$2a$10$B9e/2b.0n6x5x5Z42P0T/.w2F6p178K1a3.c3ZlK679L7M22gT7p2' -- 11
 );

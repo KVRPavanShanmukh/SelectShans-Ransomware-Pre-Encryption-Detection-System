@@ -1,5 +1,5 @@
 {
-  "name": "prd-sys-backend",
+  "name": "sentinelstream-backend",
   "version": "1.0.0",
   "scripts": {
     "dev": "python app.py"

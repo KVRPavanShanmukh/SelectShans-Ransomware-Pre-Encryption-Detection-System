@@ -1,5 +1,5 @@
 """
-Google OAuth Configuration for PRD-SYS
+Google OAuth Configuration for SentinelStream
 """
 import os
 from google.auth.transport import requests

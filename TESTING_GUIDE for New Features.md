@@ -1,4 +1,4 @@
-# PRD-SYS Phase 2 - Quick Testing Guide
+# SentinelStream Phase 2 - Quick Testing Guide
 
 ## Quick Start Testing
 
@@ -91,7 +91,7 @@ The frontend should open at `http://localhost:3000`
 1. Click "Sign in with Google" button on login page
 2. Complete Google authentication flow
 3. ✅ **Expected**:
-   - Redirected to PRD-SYS dashboard
+   - Redirected to SentinelStream dashboard
    - User logged in automatically
    - Admin status shows
    - No re-login required on page refresh

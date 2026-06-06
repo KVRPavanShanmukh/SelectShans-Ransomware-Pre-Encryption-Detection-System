@@ -14,7 +14,7 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <ShieldCheck color="var(--primary-bright)" size={28} />
-        <h2>PRD-SYS</h2>
+        <h2>SentinelStream</h2>
       </div>
 
       <nav className="sidebar-nav">

@@ -1,5 +1,5 @@
 """
-Admin API routes for PRD-SYS
+Admin API routes for SentinelStream
 """
 from flask import jsonify, request, send_file
 from datetime import datetime
@@ -155,7 +155,7 @@ def register_admin_routes(app, pool):
                 return jsonify({"error": "No audit logs found"}), 404
             
             # Convert logs to readable format
-            log_content = "PRD-SYS AUDIT LOG\n"
+            log_content = "SentinelStream AUDIT LOG\n"
             log_content += f"Generated: {datetime.now().isoformat()}\n"
             log_content += "=" * 80 + "\n\n"
             
@@ -240,7 +240,7 @@ def register_admin_routes(app, pool):
             styles = getSampleStyleSheet()
             
             # Title
-            story.append(Paragraph("PRD-SYS System Health Report", styles['Title']))
+            story.append(Paragraph("SentinelStream System Health Report", styles['Title']))
             story.append(Spacer(1, 0.3*inch))
             story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
             story.append(Spacer(1, 0.3*inch))

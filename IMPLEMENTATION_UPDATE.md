@@ -1,4 +1,4 @@
-# PRD-SYS Implementation Update - Phase 2
+# SentinelStream Implementation Update - Phase 2
 
 ## Summary of Changes
 
