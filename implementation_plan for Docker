@@ -1,0 +1,47 @@
+# Implementation Plan: Dockerize SentinelStream
+
+Create Docker configurations for the SentinelStream backend, frontend, and database services so that the entire project can be run anywhere with a single command. All Docker files will be organized within a dedicated `docker/` directory.
+
+## Proposed Changes
+
+We will create a new top-level folder `docker` to house all the Dockerization files, maintaining a clean and well-organized project structure.
+
+### New Components & Configurations
+
+#### [NEW] [Dockerfile](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/docker/backend/Dockerfile)
+- Base image: `python:3.10-slim`
+- Copies the `backend/` directory from the parent folder (using appropriate context or relative paths).
+- Installs system packages required by matplotlib, reportlab, and mysql-connector (like `build-essential`, `default-libmysqlclient-dev` if needed, though `mysql-connector-python` is pure Python/binary wheels).
+- Installs Python dependencies from `requirements.txt`.
+- Exposes port `5000` and defines the CMD to run `python app.py`.
+
+#### [NEW] [Dockerfile](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/docker/frontend/Dockerfile)
+- Multi-stage build:
+  - **Stage 1 (Build)**: Base image `node:20-alpine`. Copies `frontend/` directory, runs `npm install`, and builds the static assets using `npm run build`.
+  - **Stage 2 (Serve)**: Base image `nginx:alpine`. Copies built assets from Stage 1 to Nginx HTML folder.
+  - Custom Nginx configuration to support Single Page Application (SPA) routing (redirecting fallback routes to `index.html`) and reverse proxying `/api` requests to the backend service.
+- Exposes port `80` (or another desired port, mapped via docker-compose).
+
+#### [NEW] [nginx.conf](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/docker/frontend/nginx.conf)
+- Simple Nginx configuration for serving Vite-built static files and proxying API calls.
+
+#### [NEW] [docker-compose.yml](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/docker/docker-compose.yml)
+Defines 3 services:
+1. **`db`**: MySQL 8.0 container.
+   - Environment variables: `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE=RANSOMWARE`.
+   - Volumes: Mounts `backend/schema.sql` to `/docker-entrypoint-initdb.d/schema.sql` to automatically set up the database schema on start.
+2. **`backend`**: SentinelStream Flask backend.
+   - Depends on `db`.
+   - Environment variables: `DB_HOST=db`, `DB_PORT=3306`, `DB_USER=root`, `DB_PASSWORD=shanmukh@2006` (or fallback).
+3. **`frontend`**: SentinelStream Vite + Nginx frontend.
+   - Depends on `backend`.
+   - Port mapping: Maps container port 80 to host port `80` or `5173`.
+
+## Verification Plan
+
+### Manual Verification
+1. Navigate to the `docker/` folder.
+2. Run `docker compose up --build`.
+3. Verify that the MySQL database initializes using `schema.sql`.
+4. Open the frontend in the browser and verify successful connection to the backend and database.
+5. Verify signup, login, and dashboard functionalities inside Docker.

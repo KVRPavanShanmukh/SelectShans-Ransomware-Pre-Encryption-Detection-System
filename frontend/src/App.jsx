@@ -8,9 +8,9 @@ import EncryptionLab from './components/EncryptionLab';
 import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
 import AuditLog from './components/AuditLog';
-import SystemHealth from './components/SystemHealth';
 import Login from './components/Login';
 import Signup from './components/Signup';
+import SOAR from './components/SOAR';
 import './App.css';
 
 function App() {
@@ -153,33 +153,22 @@ function App() {
                 >
                   View Audit Log
                 </div>
-                <div
-                  style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                  onClick={() => {
-                    handleAdminNavigation('system-health');
-                    setShowProfileMenu(false);
-                  }}
-                  onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
-                  onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
-                >
-                  System Health
-                </div>
               </div>
             )}
           </div>
         </header>
 
         <div className="main-view">
-          {!adminTab && activeTab === 'dashboard' && <Dashboard logsUploaded={logsUploaded} />}
+          {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} logsUploaded={logsUploaded} />}
           {!adminTab && activeTab === 'upload' && <FileUploader onLogsUploaded={() => setLogsUploaded(true)} />}
           {!adminTab && activeTab === 'logs' && <SysmonLogs />}
           {!adminTab && activeTab === 'protection' && <ActiveShield />}
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
+          {!adminTab && activeTab === 'soar' && <SOAR userId={userId} />}
           {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase="http://127.0.0.1:5000" onNavigate={handleAdminNavigation} />}
           
           {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
           {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
-          {adminTab === 'system-health' && <SystemHealth userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
         </div>
       </main>
     </div>

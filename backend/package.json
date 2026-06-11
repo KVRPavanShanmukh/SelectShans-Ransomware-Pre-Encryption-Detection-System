@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "python app.py"
+  },
+  "dependencies": {
+    "nodemailer": "^8.0.11"
   }
 }

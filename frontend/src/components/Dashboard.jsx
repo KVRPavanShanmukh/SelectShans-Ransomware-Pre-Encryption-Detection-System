@@ -8,40 +8,120 @@ const generateData = () =>
     cpu: Math.floor(Math.random() * 50) + 10,
   }));
 
-const Dashboard = () => {
+const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
+  const [detectorActive, setDetectorActive] = useState(false);
+  const [chartData, setChartData] = useState(Array.from({ length: 20 }, (_, i) => ({ name: i, cpu: 0 })));
+  const [anomalyScore, setAnomalyScore] = useState(0);
+  const [netConns, setNetConns] = useState(0);
 
-  const [chartData, setChartData] = useState(generateData());
-  const [anomalyScore, setAnomalyScore] = useState(12);
-  const [netConns, setNetConns] = useState(38);
-
+  // Poll detector status
   useEffect(() => {
-    const interval = setInterval(() => {
-      setChartData(generateData());
-      setAnomalyScore(prev => Math.min(99, Math.max(5, prev + (Math.random() > 0.5 ? 5 : -5))));
-      setNetConns(prev => Math.max(10, prev + (Math.random() > 0.5 ? 3 : -3)));
-    }, 1500);
+    if (!userId) return;
+    
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/detector/status?user_id=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDetectorActive(data.active);
+        }
+      } catch (err) {
+        console.error("Error polling detector status:", err);
+      }
+    };
+
+    checkStatus();
+    const statusInterval = setInterval(checkStatus, 3000);
+    return () => clearInterval(statusInterval);
+  }, [userId]);
+
+  const [filesProtected, setFilesProtected] = useState(0);
+
+  // Telemetry updates — only if detector is active on host machine
+  useEffect(() => {
+    if (!detectorActive) {
+      setChartData(Array.from({ length: 20 }, (_, i) => ({ name: i, cpu: 0 })));
+      setAnomalyScore(0);
+      setNetConns(0);
+      setFilesProtected(0);
+      return;
+    }
+
+    const fetchRealtimeStats = async () => {
+      try {
+        const storedUserId = localStorage.getItem('userId') || userId;
+        const res = await fetch(`${apiBase}/api/admin/realtime-stats?user_id=${storedUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setChartData(data.chart_data);
+          setAnomalyScore(data.anomaly_score);
+          setNetConns(data.active_connections);
+          setFilesProtected(data.files_protected);
+        }
+      } catch (err) {
+        console.error("Error fetching realtime stats:", err);
+      }
+    };
+
+    fetchRealtimeStats();
+    const interval = setInterval(fetchRealtimeStats, 3000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [detectorActive, userId]);
 
   const handleDownloadDetector = () => {
     const token = localStorage.getItem("detector_token");
-
     if (!token) {
       alert("Detector token missing. Please login again.");
       return;
     }
-
-    window.location.href =
-      `http://127.0.0.1:5000/api/detector-download?token=${token}`;
+    window.location.href = `${apiBase}/api/detector-download?token=${token}`;
   };
 
-  const generatePDF = () => {
-    window.print();
+  const generatePDF = async () => {
+    try {
+      const storedUserId = localStorage.getItem('userId') || userId;
+      if (!storedUserId) {
+        alert("User session not found.");
+        return;
+      }
+      const url = `${apiBase}/api/admin/security-report?user_id=${storedUserId}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error('Failed to generate report');
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Security_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error(err);
+      alert("Error generating real-time security PDF report.");
+    }
   };
 
   return (
     <div className="dashboard-wrapper">
+
+      {!detectorActive && (
+        <div style={{
+          background: 'rgba(255, 204, 0, 0.1)',
+          border: '1px solid var(--warning)',
+          color: 'var(--warning)',
+          padding: '12px 18px',
+          borderRadius: 6,
+          fontSize: '0.82rem',
+          marginBottom: 10,
+          fontFamily: 'JetBrains Mono, monospace',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10
+        }}>
+          ⚠️ <strong>DETECTOR OFFLINE:</strong> Download and execute the agent program on your host machine to establish a secure stream and telemetry flow.
+        </div>
+      )}
 
       {/* TOP RIGHT BUTTONS */}
       <div style={{
@@ -104,7 +184,7 @@ const Dashboard = () => {
           <Lock size={24} />
           <div>
             <h4>Files Protected</h4>
-            <p>{Math.floor(anomalyScore / 10)}</p>
+            <p>{filesProtected}</p>
           </div>
         </div>
 

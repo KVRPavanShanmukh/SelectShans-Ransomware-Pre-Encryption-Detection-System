@@ -95,19 +95,62 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(false);
   };
 
-  // Google OAuth Login
-  const handleGoogleLogin = async () => {
+  const handleCredentialResponse = async (response) => {
     setError('');
     setLoading(true);
     try {
-      // In a real app, you would use Google's OAuth flow here
-      // For now, we'll show an implementation example
-      window.location.href = `http://127.0.0.1:5000/api/auth/google/callback`;
+      const res = await fetch('http://127.0.0.1:5000/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: response.credential })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("detector_token", data.detector_token);
+        localStorage.setItem("user_role", data.role || 'user');
+        onLogin(data.user_id, data.token);
+      } else {
+        setError(data.error || 'Google login failed');
+      }
     } catch {
-      setError('Google authentication failed');
+      setError('Server connection failed');
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (step !== 0) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    script.onload = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: "your-google-client-id.apps.googleusercontent.com", // User should replace this with their actual client ID
+          callback: handleCredentialResponse
+        });
+        
+        const btnDiv = document.getElementById("google-signin-btn");
+        if (btnDiv) {
+          window.google.accounts.id.renderButton(btnDiv, {
+            theme: "outline",
+            size: "large",
+            width: 300
+          });
+        }
+      }
+    };
+
+    return () => {
+      try {
+        document.body.removeChild(script);
+      } catch (e) {}
+    };
+  }, [step]);
 
   return (
     <div className="login-overlay">
@@ -180,27 +223,14 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
               <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.2)' }}></div>
             </div>
             
-            <button 
-              type="button" 
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '10px 15px',
-                background: '#fff',
-                color: '#333',
-                border: 'none',
-                borderRadius: 4,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                opacity: loading ? 0.6 : 1
-              }}>
-              🔍 Sign in with Google
-            </button>
+            <div 
+              id="google-signin-btn" 
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                marginTop: 10 
+              }}
+            ></div>
           </form>
         )}
 

@@ -107,7 +107,24 @@ class FolderMonitor(FileSystemEventHandler):
 # MAIN FUNCTION
 # ==============================
 
+import threading
+
+def ping_loop():
+    while True:
+        try:
+            requests.post(
+                f"{API_BASE}/api/detector/ping",
+                json={"token": TOKEN},
+                timeout=5
+            )
+        except Exception:
+            pass
+        time.sleep(5)
+
 def start_monitor(path):
+    # Start active status ping background thread
+    threading.Thread(target=ping_loop, daemon=True).start()
+
     observer = Observer()
     observer.schedule(FolderMonitor(), path, recursive=True)
     observer.start()

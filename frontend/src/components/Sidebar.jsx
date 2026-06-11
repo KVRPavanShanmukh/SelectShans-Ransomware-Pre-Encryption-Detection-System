@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
   const menuItems = [
@@ -8,6 +8,7 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
     { id: 'logs', label: 'Sysmon Logs', icon: <Database size={18} /> },
     { id: 'protection', label: 'Active Shield', icon: <ShieldCheck size={18} /> },
     { id: 'encryption', label: 'Encryption Lab', icon: <Lock size={18} /> },
+    { id: 'soar', label: 'SOAR Panel', icon: <Zap size={18} /> },
   ];
 
   return (

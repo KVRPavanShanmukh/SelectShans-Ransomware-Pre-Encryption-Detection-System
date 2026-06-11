@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: sentinelstream-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-shanmukh@2006}
+      MYSQL_DATABASE: ${DB_NAME:-RANSOMWARE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ../backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-shanmukh@2006}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      target: backend
+    container_name: sentinelstream-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD:-shanmukh@2006}
+      - DB_NAME=${DB_NAME:-RANSOMWARE}
+      - DETECTOR_SECRET=${DETECTOR_SECRET:-prd-secret}
+      - MAIL_HOST=${MAIL_HOST:-smtp.gmail.com}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USER=${MAIL_USER:-example@gmail.com}
+      - MAIL_PASS=${MAIL_PASS:-your_key}
+      - JWT_SECRET=${JWT_SECRET:-sentinelstream_super_secure_random_string_change_this_12345}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1d}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      target: frontend
+    container_name: sentinelstream-frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

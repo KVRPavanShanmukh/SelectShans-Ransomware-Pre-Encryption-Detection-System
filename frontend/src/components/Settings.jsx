@@ -102,13 +102,6 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
         setShowAdminMenu(false);
     };
 
-    const handleSystemHealth = () => {
-        if (onNavigate) {
-            onNavigate('system-health');
-        }
-        setShowAdminMenu(false);
-    };
-
     return (
         <div className="dashboard-wrapper">
             {message && (
@@ -215,26 +208,6 @@ const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, on
                                     onMouseLeave={(e) => e.target.style.background = 'none'}
                                 >
                                     <FileText size={16} /> View Audit Log
-                                </button>
-                                <button
-                                    onClick={handleSystemHealth}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px 16px',
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#e2e8f0',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        fontSize: '0.9rem'
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.background = 'rgba(7, 124, 195, 0.2)'}
-                                    onMouseLeave={(e) => e.target.style.background = 'none'}
-                                >
-                                    <Activity size={16} /> System Health
                                 </button>
                             </div>
                         )}
