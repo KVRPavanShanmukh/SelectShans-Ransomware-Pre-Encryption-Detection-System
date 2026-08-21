@@ -5,9 +5,11 @@ import jwt
 import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from flask import request, jsonify
+from flask import request, jsonify, g
 
-JWT_SECRET = os.getenv('JWT_SECRET', 'sentinelstream_super_secret_jwt_key_2024')
+def get_jwt_secret():
+    return os.getenv('JWT_SECRET', 'sentinelstream_super_secret_jwt_key_2024')
+
 JWT_ALGORITHM = 'HS256'
 TOKEN_EXPIRY_MINUTES = 30
 
@@ -20,16 +22,18 @@ def create_token(user_id, username, email):
         'iat': datetime.now(timezone.utc),
         'exp': datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 def verify_token(token):
     """Verify JWT token and return payload"""
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
+        print("ExpiredSignatureError")
         return None
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        print(f"InvalidTokenError: {e}")
         return None
 
 def refresh_token(token):
@@ -55,13 +59,15 @@ def token_required(f):
                 return jsonify({'error': 'Invalid token format'}), 401
         
         if not token:
+            print("Token missing in headers")
             return jsonify({'error': 'Token missing'}), 401
         
         payload = verify_token(token)
         if not payload:
+            print(f"Token invalid or expired: {token}")
             return jsonify({'error': 'Token invalid or expired'}), 401
         
-        request.user = payload
+        g.user = payload
         return f(*args, **kwargs)
     
     return decorated_function

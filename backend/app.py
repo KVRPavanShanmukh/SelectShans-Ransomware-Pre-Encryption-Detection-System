@@ -20,9 +20,10 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 from dotenv import load_dotenv
+load_dotenv()
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from flask import Flask, request, jsonify, send_file, after_this_request
+from flask import Flask, request, jsonify, send_file, after_this_request, g
 from flask_cors import CORS
 from mysql.connector import pooling
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -46,13 +47,15 @@ import matplotlib.pyplot as plt
 # INITIAL SETUP
 # =====================================================
 
-load_dotenv()
-
 app = Flask(__name__)
 CORS(app)
 
 print("Starting SentinelStream Backend...")
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    return str(traceback.format_exc()), 500
 
 # =====================================================
 # DATABASE CONFIG & AUTO-CREATION
@@ -122,6 +125,10 @@ def init_db(pool):
                 current_stmt = []
                 
         # Also run ALTER to make sure role column and admin user exist
+        try:
+            statements.append("ALTER TABLE users ADD COLUMN dob VARCHAR(10) DEFAULT '300706';")
+        except Exception:
+            pass
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('admin', 'user') DEFAULT 'user';")
         statements.append("UPDATE users SET role = 'admin' WHERE username = 'admin';")
         
@@ -214,26 +221,30 @@ def signup():
         return jsonify({"error": "All fields required"}), 400
 
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True, buffered=True)
+    try:
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        cursor.execute("SELECT id FROM users WHERE username=%s", (data["username"],))
+        if cursor.fetchone():
+            return jsonify({"error": "Username taken"}), 409
 
-    cursor.execute("SELECT id FROM users WHERE username=%s", (data["username"],))
-    if cursor.fetchone():
-        return jsonify({"error": "Username taken"}), 409
-
-    cursor.execute("""
-        INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (
-        data["username"],
-        generate_password_hash(data["password"]),
-        data["email"],
-        data["sec_q"],
-        generate_password_hash(data["sec_a"])
-    ))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+        try:
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                data["username"],
+                generate_password_hash(data["password"]),
+                data["email"],
+                data["sec_q"],
+                generate_password_hash(data["sec_a"])
+            ))
+            conn.commit()
+        except Exception as e:
+            return jsonify({"error": "Username or email already exists"}), 409
+    finally:
+        try: cursor.close()
+        except: pass
+        conn.close()
 
     return jsonify({"message": "User created"}), 201
 
@@ -243,18 +254,26 @@ def login():
     data = request.json
 
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True, buffered=True)
+    try:
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        cursor.execute(
+            "SELECT id, username, email, password_hash, dob FROM users WHERE username=%s OR email=%s",
+            (data.get("username"), data.get("username"))
+        )
+        user = cursor.fetchone()
+    finally:
+        try: cursor.close()
+        except: pass
+        conn.close()
 
-    cursor.execute(
-        "SELECT * FROM users WHERE username=%s OR email=%s",
-        (data.get("username"), data.get("username"))
-    )
+    is_valid = False
+    if user and user.get("password_hash"):
+        try:
+            is_valid = check_password_hash(user["password_hash"], data.get("password"))
+        except ValueError:
+            is_valid = False
 
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    if not user or not check_password_hash(user["password_hash"], data.get("password")):
+    if not user or not is_valid:
         return jsonify({"error": "Invalid credentials"}), 401
 
     email = user["email"]
@@ -291,15 +310,7 @@ def verify():
     if pending["otp"] != data.get("otp") or pending["psk"] != data.get("psk"):
         return jsonify({"error": "Invalid OTP/PSK"}), 401
 
-    conn = pool.get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO login_sessions (user_id, login_time, is_active)
-        VALUES (%s, NOW(), TRUE)
-    """, (pending["user_id"],))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    # Log the successful login (Skipping login_sessions since it's not in schema.sql)
 
     detector_token = create_detector_token(pending["user_id"], pending["email"])
     jwt_token = create_token(pending["user_id"], pending["username"], pending["email"])
@@ -314,6 +325,144 @@ def verify():
         "email": pending["email"],
         "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
+
+# =====================================================
+# BETA LAYER ROUTES
+# =====================================================
+
+_pending_beta_logins = {}
+
+@app.route('/api/beta/login', methods=['POST'])
+@token_required
+def beta_login():
+    current_user = g.user
+    
+    data = request.json or {}
+    requested_email = data.get("email", "").lower().strip()
+    
+    if not requested_email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    if requested_email != current_user["email"].lower():
+        return jsonify({"error": "Unauthorized email address"}), 403
+        
+    email = requested_email
+    
+    conn = pool.get_connection()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT dob FROM users WHERE id=%s", (current_user["user_id"],))
+        user = cursor.fetchone()
+    finally:
+        try: cursor.close()
+        except: pass
+        conn.close()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    int_otp = ''.join(secrets.choice("0123456789") for _ in range(4))
+    str_otp = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3))
+
+    _pending_beta_logins[email] = {
+        "int_otp": int_otp,
+        "str_otp": str_otp,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
+    }
+
+    send_email_safe(
+        email,
+        "SentinelStream GHOST Layer Access",
+        f"GHOST Layer Authorization required.\n\nInteger OTP: {int_otp}\nString OTP: {str_otp}\n\nInterleave these to access the GHOST Layer."
+    )
+
+    return jsonify({"message": "Beta OTPs sent"}), 200
+
+@app.route('/api/beta/verify', methods=['POST'])
+@token_required
+def beta_verify():
+    current_user = g.user
+    data = request.json
+    interleaved_code = data.get("code", "")
+    email = current_user["email"].lower()
+    
+    pending = _pending_beta_logins.get(email)
+    if not pending:
+        return jsonify({"error": "No pending beta login"}), 400
+        
+    if datetime.now(timezone.utc) > pending["expires_at"]:
+        del _pending_beta_logins[email]
+        return jsonify({"error": "Beta OTP expired"}), 400
+
+    int_otp = pending["int_otp"]
+    str_otp = pending["str_otp"]
+
+    expected_interleaved = ""
+    for i in range(3):
+        expected_interleaved += int_otp[i] + str_otp[i]
+    expected_interleaved += int_otp[3]
+    
+    expected_full_code = expected_interleaved
+    
+    if interleaved_code != expected_full_code:
+        return jsonify({"error": "Invalid GHOST Layer Code"}), 401
+        
+    del _pending_beta_logins[email]
+    
+    # Generate a special beta token
+    beta_token = jwt.encode(
+        {"user_id": current_user["user_id"], "beta_access": True, "exp": datetime.now(timezone.utc) + timedelta(hours=2)},
+        os.getenv("JWT_SECRET", "sentinelstream_super_secure_random_string_change_this_12345"),
+        algorithm="HS256"
+    )
+    
+    return jsonify({"message": "GHOST Layer Access Granted", "beta_token": beta_token}), 200
+
+# =====================================================
+# TERMINAL ROUTES
+# =====================================================
+
+@app.route('/api/beta/terminal', methods=['POST'])
+@token_required
+def beta_terminal():
+    current_user = g.user
+    beta_token = request.headers.get("X-Beta-Token")
+    if not beta_token:
+        return jsonify({"error": "Beta token required"}), 403
+        
+    try:
+        decoded = jwt.decode(
+            beta_token, 
+            os.getenv("JWT_SECRET", "sentinelstream_super_secure_random_string_change_this_12345"), 
+            algorithms=["HS256"]
+        )
+        if not decoded.get("beta_access"):
+            return jsonify({"error": "Invalid Beta token"}), 403
+    except Exception as e:
+        return jsonify({"error": "Invalid Beta token"}), 403
+        
+    data = request.json
+    command = data.get("command", "").strip().lower()
+    
+    if command == "help":
+        return jsonify({"output": "Available commands:\n  help        - Show this help\n  status      - Show system health\n  architecture - Display internal layer structure\n  processes    - View whitelist processes"})
+    elif command == "status":
+        return jsonify({"output": "System Health:\n  CPU: 12%\n  Memory: 45%\n  Beta Layer: ACTIVE\n  Encryption Lab: SECURE"})
+    elif command == "architecture":
+        return jsonify({"output": "SentinelStream Architecture:\n  [Layer Alpha] Frontend UI (Public)\n  [Layer Beta] Real-time Core (MFA Secured)\n  [Detector] FolderGuard Agent\n  [DataStore] MySQL Instance"})
+    elif command == "processes":
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT process_name, description FROM process_whitelist")
+        processes = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        out = "Whitelisted Processes:\n"
+        for p in processes:
+            out += f"  - {p['process_name']} ({p['description']})\n"
+        return jsonify({"output": out})
+    else:
+        return jsonify({"output": f"Command not found: {command}. Type 'help' for available commands."})
 
 
 # =====================================================

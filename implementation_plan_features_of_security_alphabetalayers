@@ -1,0 +1,50 @@
+# Implementation Plan: Beta Layer & Custom Terminal
+
+The goal is to split the application into two layers (Alpha and Beta), implement a highly custom MFA logic for the Beta layer using an interleaved DOB/OTP string, and create a custom terminal for internal architecture navigation.
+
+## Proposed Changes
+
+### Backend Changes
+
+#### 1. Database Schema (`backend/schema.sql`)
+- Add a `dob` column to the `users` table to store the user's date of birth (e.g., `VARCHAR(6)` for the `DDMMYY` format).
+
+#### 2. Authentication API (`backend/app.py` & new routes)
+- Update the `/api/login` flow or create a new Beta Layer Login flow.
+- Add an endpoint to generate the custom MFA codes (String Code + Integer OTP) and email them.
+- Add an endpoint `/api/beta/verify` to validate the interleaved MFA code format.
+- The verification logic will parse the input `3007065s1p4s4`, extract the DOB (`300706`), Integer OTP (`5144`), and String OTP (`sps`), and validate them against the DB and generated values.
+
+#### 3. Terminal API (`backend/app.py` / `terminal_routes.py`)
+- Add endpoints to support the custom terminal commands (e.g., fetching real-time architecture states, active sessions, system health) ensuring they are securely gated behind the Beta Layer authentication.
+
+### Frontend Changes
+
+#### 1. Layer Separation & Routing (`frontend/src/App.jsx`)
+- Separate the existing views into **Layer Alpha** (standard dashboard, settings) and **Beta Layer** (real-time updates, Terminal).
+- Introduce a Beta Layer Entry component that prompts for the Beta MFA if the user wants to access the real-time or terminal features.
+
+#### 2. Beta Layer MFA Component (`frontend/src/components/BetaLogin.jsx`)
+- [NEW] Create a new component that asks for the custom MFA string (`DOB + Interleaved OTP`).
+- Handle the specific error states and UX for this complex format.
+
+#### 3. Custom Terminal (`frontend/src/components/BetaTerminal.jsx`)
+- [NEW] Build a terminal-like UI.
+- Support commands like `help`, `status`, `architecture`, `realtime-feed`.
+- It will communicate with the backend terminal API endpoints to fetch live architectural data.
+
+## Open Questions
+
+> [!IMPORTANT]
+> 1. **DOB Format**: The example uses `300706` (DDMMYY). Should we enforce this format during user signup, or convert existing dates to this format?
+> 2. **Interleaving Logic**: The example `3007065s1p4s4` implies DOB + (Int1, Str1, Int2, Str2, Int3, Str3, Int4). Since IntegerOTP is 4 chars and StringOTP is 3 chars, the last char is an Integer. Should the lengths always be fixed (4 ints, 3 strings)?
+> 3. **Terminal Capabilities**: What specific commands do you want the terminal to support for "navigating the internal architecture"? Should it show the database schema, connected services, or process states?
+> 4. **Alpha vs Beta Split**: Which specific components (from the sidebar) belong in Alpha vs. Beta? (e.g., Dashboard vs. SOAR/ActiveShield).
+
+## Verification Plan
+
+### Manual Verification
+- Attempt standard login (Alpha).
+- Attempt Beta login using correctly interleaved MFA strings.
+- Verify that invalid interleaved strings fail correctly.
+- Test terminal commands to ensure they fetch backend data securely and reject unauthorized access.

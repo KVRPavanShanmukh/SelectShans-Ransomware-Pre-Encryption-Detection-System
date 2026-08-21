@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap, Terminal } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
   const menuItems = [
@@ -15,7 +15,7 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <ShieldCheck color="var(--primary-bright)" size={28} />
-        <h2>SentinelStream</h2>
+        <h2>SentinelStream-Samurai</h2>
       </div>
 
       <nav className="sidebar-nav">
@@ -44,6 +44,18 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
       </nav>
 
       <div className="sidebar-footer">
+        <div style={{ padding: '10px 20px', fontSize: '0.65rem', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', letterSpacing: 1, marginTop: 10 }}>
+          Advanced Access
+        </div>
+        <div
+          className={`nav-item ${activeTab === 'beta' ? 'active' : ''}`}
+          onClick={() => setActiveTab('beta')}
+          style={{ borderLeft: '3px solid #ff4d4d' }}
+        >
+          <Terminal size={18} color="#ff4d4d" />
+          <span style={{ color: '#ff4d4d' }}>GHOST - Shiki-kan</span>
+        </div>
+        
         <div
           className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}

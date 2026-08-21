@@ -1,0 +1,42 @@
+# Implementation Plan: GHOST Layer and Samurai Renaming
+
+This document outlines the proposed changes to rename the layers, update the UI headers, and implement the new access flow for the GHOST Layer (previously Beta Layer).
+
+## User Review Required
+
+> [!IMPORTANT]
+> Please review the "Open Questions" and "Proposed Changes" below. Let me know if the flow matches your expectations before I begin modifying the frontend files.
+
+## Open Questions
+
+1. **"Enter gmail" in GHOST Login:** The current Beta login automatically sends the OTP to the logged-in user's email (it knows who you are based on your token). Should the new GHOST login explicitly ask the user to type in their email address again before sending the OTP, or should we keep the current one-click "Initiate Handshake" (which we can rename to "Request GHOST Access") that sends it to their registered email?
+2. **"Separate navigation menu" for GHOST Request:** Currently, "Beta Layer (Arch)" is just an item at the bottom of the main sidebar. Do you want to move "GHOST - Shiki-kan" completely OUT of the main sidebar menu (e.g., placing it in the top navigation bar or the user profile dropdown), or should it remain at the bottom of the sidebar but with a distinct style?
+3. **Dashboard Transformation:** When inside the GHOST Layer, do you want a completely different color scheme/theme (e.g., turning the UI red/black or adding a "GHOST ACTIVE" watermark) to signify the dashboard transformation?
+
+## Proposed Changes
+
+### 1. Backend Logic Update (Completed)
+- Removed the DOB constraint from the backend OTP verification logic (`app.py`).
+
+### 2. Rename Layers and UI Elements
+- **Sidebar & Login Header:** Rename "SentinelStream" to "SentinelStream-Samurai" in `Sidebar.jsx` and `Login.jsx`.
+- **GHOST - Shiki-kan:** Rename all references from "Beta Layer" to "GHOST Layer" / "GHOST - Shiki-kan". 
+
+### 3. GHOST Access Flow (`BetaLogin.jsx` -> `GhostLogin.jsx`)
+- Rename `BetaLogin.jsx` to `GhostLogin.jsx` (and update imports in `App.jsx`).
+- Update the UI to show the new instructions:
+  - a) Request OTP (or Enter Gmail to receive OTP).
+  - b) Enter the CryptOTP (Interleaved String + Integer OTPs, no DOB).
+  - c) Login.
+- Modify the warning messages to fit the "GHOST - Shiki-kan" theme instead of "BETA_LAYER // SYS.ACCESS".
+
+### 4. Navigation Menu Adjustments (`Sidebar.jsx` & `App.jsx`)
+- Separate the "GHOST - Shiki-kan" trigger from the main Samurai layer navigation. We will move it to a distinct "Advanced Access" section at the bottom of the sidebar or top nav.
+- When the GHOST layer is unlocked, the sidebar will update to show both the Samurai layer items and the new GHOST specific items.
+
+## Verification Plan
+
+### Automated/Manual Testing
+- Manually run the frontend and verify that clicking the "GHOST - Shiki-kan" button opens the new login overlay.
+- Complete the GHOST login flow without the DOB constraint and ensure access is granted.
+- Ensure the UI clearly distinguishes between the Samurai and GHOST layers.

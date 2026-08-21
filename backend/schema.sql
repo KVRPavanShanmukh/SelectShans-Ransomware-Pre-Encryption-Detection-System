@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
+    dob VARCHAR(10) DEFAULT '300706',
     sec_q VARCHAR(255),
     sec_a_hash VARCHAR(255),
     role ENUM('admin', 'user') DEFAULT 'user',
@@ -134,9 +135,9 @@ CREATE TABLE IF NOT EXISTS system_health_snapshots (
 INSERT IGNORE INTO users (username, password_hash, email, sec_q, sec_a_hash, role)
 VALUES (
     'admin',
-    '$2a$10$wT.M2O58U/mI/z170A.X4.sYhYyA3F5326hY212Z6pP.8u9tO7R86', -- password123
+    'scrypt:32768:8:1$rn95kIq9aE2NbVYS$5c6e29209543965c94b4bb18d7102bc72b88d675b00a74f66ba0c21f7fef9551adec4069eee46e8cc854d1791bf9b16c448dcea09416fffa4abd91d1acd07777', -- password123
     'admin@sentinelstream.local',
     'What is the Event ID for FileCreate in Sysmon?',
-    '$2a$10$B9e/2b.0n6x5x5Z42P0T/.w2F6p178K1a3.c3ZlK679L7M22gT7p2', -- 11
+    'scrypt:32768:8:1$0ojtnWWc3ZW50wFJ$9a89ebf942268dd75ee79b4dbfda8d53ee81968345a0d39c970cc5991e495e2c5c746101e4e249a59e8c489b6f52601259925ebec0d70aed93cc369861c765a8', -- 11
     'admin'
 );

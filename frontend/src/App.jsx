@@ -11,6 +11,8 @@ import AuditLog from './components/AuditLog';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import SOAR from './components/SOAR';
+import BetaLogin from './components/BetaLogin';
+import BetaTerminal from './components/BetaTerminal';
 import './App.css';
 
 function App() {
@@ -22,6 +24,7 @@ function App() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [userId, setUserId] = useState(null);
   const [jwtToken, setJwtToken] = useState(null);
+  const [betaToken, setBetaToken] = useState(null);
   const [tokenRefreshInterval, setTokenRefreshInterval] = useState(null);
 
   // Check for persisted session on app load
@@ -79,6 +82,7 @@ function App() {
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('userId');
     setJwtToken(null);
+    setBetaToken(null);
     setUserId(null);
     setIsAuthenticated(false);
     if (tokenRefreshInterval) {
@@ -99,7 +103,7 @@ function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${betaToken ? 'ghost-theme' : ''}`}>
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
 
       <main className="content-area">
@@ -166,6 +170,21 @@ function App() {
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
           {!adminTab && activeTab === 'soar' && <SOAR userId={userId} />}
           {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase="http://127.0.0.1:5000" onNavigate={handleAdminNavigation} />}
+          
+          {!adminTab && activeTab === 'beta' && !betaToken && (
+            <BetaLogin 
+              jwtToken={jwtToken} 
+              onBetaLoginSuccess={(token) => setBetaToken(token)} 
+              onCancel={() => setActiveTab('dashboard')} 
+            />
+          )}
+          {!adminTab && activeTab === 'beta' && betaToken && (
+            <BetaTerminal 
+              jwtToken={jwtToken} 
+              betaToken={betaToken} 
+              onClose={() => setActiveTab('dashboard')} 
+            />
+          )}
           
           {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
           {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}

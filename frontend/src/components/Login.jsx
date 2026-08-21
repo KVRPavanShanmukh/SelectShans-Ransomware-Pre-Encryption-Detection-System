@@ -36,7 +36,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/login', {
+      const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(creds)
@@ -65,7 +65,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/login/verify', {
+      const response = await fetch('http://localhost:5000/api/login/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,62 +95,9 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
     setLoading(false);
   };
 
-  const handleCredentialResponse = async (response) => {
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch('http://127.0.0.1:5000/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: response.credential })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        localStorage.setItem("detector_token", data.detector_token);
-        localStorage.setItem("user_role", data.role || 'user');
-        onLogin(data.user_id, data.token);
-      } else {
-        setError(data.error || 'Google login failed');
-      }
-    } catch {
-      setError('Server connection failed');
-    }
-    setLoading(false);
-  };
 
-  useEffect(() => {
-    if (step !== 0) return;
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
 
-    script.onload = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: "your-google-client-id.apps.googleusercontent.com", // User should replace this with their actual client ID
-          callback: handleCredentialResponse
-        });
-        
-        const btnDiv = document.getElementById("google-signin-btn");
-        if (btnDiv) {
-          window.google.accounts.id.renderButton(btnDiv, {
-            theme: "outline",
-            size: "large",
-            width: 300
-          });
-        }
-      }
-    };
-
-    return () => {
-      try {
-        document.body.removeChild(script);
-      } catch (e) {}
-    };
-  }, [step]);
 
   return (
     <div className="login-overlay">
@@ -158,7 +105,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
         <div className="login-header">
           <ShieldCheck size={48} color="#007CC3" />
-          <h2>SentinelStream</h2>
+          <h2>SentinelStream-Samurai</h2>
           <p>Pre-Encryption Detection System</p>
         </div>
 
@@ -211,26 +158,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
               {loading ? 'Processing...' : 'Send OTP & PSK'}
             </button>
             
-            <div style={{ 
-              textAlign: 'center', 
-              margin: '15px 0', 
-              display: 'flex', 
-              alignItems: 'center',
-              gap: 10
-            }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.2)' }}></div>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>OR</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.2)' }}></div>
-            </div>
-            
-            <div 
-              id="google-signin-btn" 
-              style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                marginTop: 10 
-              }}
-            ></div>
+
           </form>
         )}
 
