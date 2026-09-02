@@ -3,7 +3,7 @@ import { Terminal as TerminalIcon, X } from 'lucide-react';
 
 const BetaTerminal = ({ jwtToken, betaToken, onClose }) => {
   const [history, setHistory] = useState([
-    { type: 'system', text: 'SentinelStream Beta Terminal - Secured Connection Established' },
+    { type: 'system', text: 'SelectShans Beta Terminal - Secured Connection Established' },
     { type: 'system', text: 'Type "help" to see available commands.' }
   ]);
   const [input, setInput] = useState('');

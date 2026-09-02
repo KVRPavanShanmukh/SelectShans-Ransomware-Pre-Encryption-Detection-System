@@ -1,6 +1,6 @@
 const http = require('http');
 
-console.log('🛡️ [SentinelStream] Starting Windows Event Log Simulator Service...');
+console.log('🛡️ [SelectShans] Starting Windows Event Log Simulator Service...');
 
 const processes = [
     'explorer.exe', 'chrome.exe', 'winword.exe', 'svchost.exe', // Whitelisted
@@ -99,4 +99,4 @@ const scheduleAttack = () => {
 };
 
 scheduleAttack();
-console.log('🛡️ [SentinelStream] Simulator Active. Sending random events via HTTP to 127.0.0.1:5000/api/logs');
+console.log('🛡️ [SelectShans] Simulator Active. Sending random events via HTTP to 127.0.0.1:5000/api/logs');

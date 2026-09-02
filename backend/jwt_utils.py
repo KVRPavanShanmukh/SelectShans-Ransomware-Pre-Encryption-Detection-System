@@ -1,5 +1,5 @@
 """
-JWT and Session Management for SentinelStream
+JWT and Session Management for SelectShans
 """
 import jwt
 import os

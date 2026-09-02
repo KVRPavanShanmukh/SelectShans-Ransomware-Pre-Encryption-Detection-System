@@ -115,6 +115,17 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Detector Logs Table
+CREATE TABLE IF NOT EXISTS detector_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    event_type VARCHAR(100) NOT NULL,
+    directory VARCHAR(500),
+    event_count INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- System Health Snapshots
 CREATE TABLE IF NOT EXISTS system_health_snapshots (
     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -1,5 +1,5 @@
 """
-Google OAuth Configuration for SentinelStream
+Google OAuth Configuration for SelectShans
 """
 import os
 from google.auth.transport import requests

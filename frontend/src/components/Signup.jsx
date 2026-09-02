@@ -4,7 +4,7 @@ import { User, Mail, Lock, ShieldCheck } from 'lucide-react';
 const SECURITY_QUESTIONS = [
     'What is the Event ID for FileCreate in Sysmon?',
     'What algorithm does this system use for file traversal?',
-    'What does PRD stand for in SentinelStream?',
+    'What does PRD stand for in SelectShans?',
     'What encryption standard is simulated in the lab?',
 ];
 
@@ -57,7 +57,7 @@ const Signup = ({ onSignupSuccess, onSwitchToLogin }) => {
                     <div className="shield-pulse">
                         <ShieldCheck size={48} color="var(--primary-bright)" />
                     </div>
-                    <h2>SentinelStream REGISTRATION</h2>
+                    <h2>SelectShans REGISTRATION</h2>
                     <p>Request Analyst Access</p>
                 </div>
 

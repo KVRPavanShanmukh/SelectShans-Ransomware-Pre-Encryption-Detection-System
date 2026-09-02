@@ -121,7 +121,7 @@ const SOAR = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
                 🚨 Critical Threat Incident Auto-Triggered
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#fca5a5' }}>
-                The SentinelStream FolderGuard agent running on the host system detected an anomaly.
+                The SelectShans FolderGuard agent running on the host system detected an anomaly.
               </p>
             </div>
           </div>

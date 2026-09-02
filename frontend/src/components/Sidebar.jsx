@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap, Terminal } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap, Terminal, Mail } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
   const menuItems = [
@@ -9,13 +9,14 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
     { id: 'protection', label: 'Active Shield', icon: <ShieldCheck size={18} /> },
     { id: 'encryption', label: 'Encryption Lab', icon: <Lock size={18} /> },
     { id: 'soar', label: 'SOAR Panel', icon: <Zap size={18} /> },
+    { id: 'mailer', label: 'Mail Dispatch', icon: <Mail size={18} /> },
   ];
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
         <ShieldCheck color="var(--primary-bright)" size={28} />
-        <h2>SentinelStream-Samurai</h2>
+        <h2>SelectShans</h2>
       </div>
 
       <nav className="sidebar-nav">

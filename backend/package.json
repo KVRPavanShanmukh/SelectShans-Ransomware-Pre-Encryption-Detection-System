@@ -1,5 +1,5 @@
 {
-  "name": "sentinelstream-backend",
+  "name": "selectshans-backend",
   "version": "1.0.0",
   "scripts": {
     "dev": "python app.py"

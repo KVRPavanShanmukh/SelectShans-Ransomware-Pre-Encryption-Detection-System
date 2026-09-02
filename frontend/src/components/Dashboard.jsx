@@ -78,27 +78,31 @@ const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
     window.location.href = `${apiBase}/api/detector-download?token=${token}`;
   };
 
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
   const generatePDF = async () => {
     try {
-      const storedUserId = localStorage.getItem('userId') || userId;
-      if (!storedUserId) {
-        alert("User session not found.");
-        return;
-      }
-      const url = `${apiBase}/api/admin/security-report?user_id=${storedUserId}`;
+      setIsGeneratingPDF(true);
+      const storedUserId = localStorage.getItem('userId') || userId || '';
+      const url = `${apiBase}/api/admin/security-report${storedUserId ? `?user_id=${storedUserId}` : ''}`;
       const res = await fetch(url);
       if (!res.ok) {
-        throw new Error('Failed to generate report');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to generate security report');
       }
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `Security_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `SelectShans_Security_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     } catch (err) {
       console.error(err);
-      alert("Error generating real-time security PDF report.");
+      alert(err.message || "Error generating real-time security PDF report.");
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -147,16 +151,20 @@ const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
 
         <button
           onClick={generatePDF}
+          disabled={isGeneratingPDF}
           style={{
-            background: '#1e293b',
+            background: isGeneratingPDF ? '#334155' : '#1e293b',
             border: '1px solid #334155',
             color: '#cbd5e1',
             padding: '6px 14px',
             borderRadius: 6,
-            cursor: 'pointer'
+            cursor: isGeneratingPDF ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
           }}
         >
-          <Printer size={16} /> Generate Report
+          <Printer size={16} /> {isGeneratingPDF ? 'Generating PDF...' : 'Generate Report'}
         </button>
 
       </div>

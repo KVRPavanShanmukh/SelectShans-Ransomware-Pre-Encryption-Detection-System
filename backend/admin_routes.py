@@ -155,7 +155,7 @@ def register_admin_routes(app, pool):
                 return jsonify({"error": "No audit logs found"}), 404
             
             # Convert logs to readable format
-            log_content = "SentinelStream AUDIT LOG\n"
+            log_content = "SelectShans AUDIT LOG\n"
             log_content += f"Generated: {datetime.now().isoformat()}\n"
             log_content += "=" * 80 + "\n\n"
             

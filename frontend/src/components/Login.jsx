@@ -105,7 +105,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
         <div className="login-header">
           <ShieldCheck size={48} color="#007CC3" />
-          <h2>SentinelStream-Samurai</h2>
+          <h2>SelectShans</h2>
           <p>Pre-Encryption Detection System</p>
         </div>
 
