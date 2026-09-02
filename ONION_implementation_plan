@@ -1,0 +1,60 @@
+# Implementation Plan - ONION AI Agent for Home Page
+
+Create and integrate **ONION**, an AI-powered Security Operations Center (SOC) Assistant and Threat Monitoring Agent, directly on the application's home page (Dashboard). ONION will answer user queries, analyze system security metrics, explain ransomware detection telemetry, recommend security postures, and execute direct actions.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **ONION AI Agent Capabilities**:
+> ONION will operate with real-time access to database metrics (anomaly scores, active alerts, host detector status, whitelisted processes, and log telemetry).
+> It will feature a hybrid smart AI engine capable of answering domain-specific cybersecurity & platform questions out-of-the-box, with support for live LLM response enrichment if API credentials are configured.
+
+## Proposed Changes
+
+### Backend Logic
+
+#### [MODIFY] [backend/app.py](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/backend/app.py)
+- Implement `/api/onion/chat` endpoint:
+  - Accepts user prompt, `user_id`, and session context.
+  - Queries active alerts, anomaly score, process whitelist count, and detector ping state to inject real-time security context.
+  - Processes queries using ONION's specialized SOC AI engine (supporting threat status checks, ransomware pre-encryption explanations, log summaries, whitelist info, security recommendations, and general queries).
+  - Returns structured AI responses containing markdown text, action suggestions, and interactive security trigger buttons.
+- Implement `/api/onion/diagnose` endpoint for quick automated SOC system health diagnostics.
+
+---
+
+### Frontend UI & Components
+
+#### [NEW] [frontend/src/components/OnionAgent.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/OnionAgent.jsx)
+- Build the **ONION AI Agent** component:
+  - Futuristic cyber UI aesthetic featuring glowing neon accents, ONION agent status indicator badge, and animated pulse avatar.
+  - Quick query chips (e.g. "Analyze security status", "Check active alerts", "How does pre-encryption work?", "Whitelisted processes").
+  - Message bubble stream supporting markdown formatting, bullet points, system status badge cards inside responses, and action buttons.
+  - Interactive chat panel supporting docked mode on the Dashboard and floating overlay mode.
+  - Controls to minimize/expand, clear chat, copy responses, and run quick automated diagnostic scans.
+
+#### [MODIFY] [frontend/src/components/Dashboard.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/Dashboard.jsx)
+- Embed ONION AI Agent on the home page (Dashboard):
+  - Add an ONION AI Assistant banner / dock at the top/side of the dashboard.
+  - Pass user ID and system status to ONION.
+
+#### [MODIFY] [frontend/src/App.css](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/App.css)
+- Add CSS styles and animations for ONION AI Agent:
+  - Glowing onion avatar animations, glowing borders, smooth scroll chat area, quick query pill hovers, glassmorphism cards.
+
+## Verification Plan
+
+### Automated / API Verification
+- Test `/api/onion/chat` POST requests with sample queries:
+  - Security status query
+  - Active alert query
+  - Ransomware pre-encryption mechanics query
+  - Whitelist process query
+  - General greeting and custom security queries
+- Verify JSON response schema (`reply`, `quick_actions`, `status_summary`).
+
+### Manual UI Verification
+- Verify ONION AI Agent renders smoothly on the Home Page (`Dashboard.jsx`).
+- Test interactive chat typing, sending messages via Enter or button click.
+- Test clicking quick suggestion chips.
+- Test expand, minimize, and diagnostic trigger functionality.

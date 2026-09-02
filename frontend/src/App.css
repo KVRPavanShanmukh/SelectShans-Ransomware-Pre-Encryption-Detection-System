@@ -1918,3 +1918,353 @@ body {
     color: black !important;
   }
 }
+
+/* ============================================================
+   ONION AI AGENT COMPONENT STYLES
+   ============================================================ */
+.onion-agent-card {
+  background: rgba(5, 12, 18, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 124, 195, 0.3);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 124, 195, 0.1);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.onion-agent-card.minimized {
+  height: 64px;
+}
+
+.onion-header {
+  padding: 14px 18px;
+  background: rgba(2, 6, 10, 0.9);
+  border-bottom: 1px solid rgba(0, 124, 195, 0.25);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.onion-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.onion-avatar-glow {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 124, 195, 0.15);
+  border: 1px solid rgba(0, 124, 195, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #007CC3;
+  position: relative;
+}
+
+.onion-icon-pulse {
+  animation: onion-pulse 2s infinite ease-in-out;
+}
+
+.onion-pulse-ring {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 255, 65, 0.4);
+  animation: onion-ring 2.5s infinite linear;
+}
+
+.onion-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.onion-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #f8fafc;
+  letter-spacing: 0.5px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.onion-status-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  color: #00FF41;
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.onion-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00FF41;
+  box-shadow: 0 0 8px #00FF41;
+}
+
+.onion-subtitle {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.onion-header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.onion-action-btn {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.onion-action-btn:hover {
+  background: rgba(0, 124, 195, 0.2);
+  color: #f8fafc;
+  border-color: #007CC3;
+}
+
+/* CHAT MESSAGES */
+.onion-messages-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: radial-gradient(circle at top right, rgba(0, 124, 195, 0.05), transparent 60%);
+}
+
+.onion-messages-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.onion-messages-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 124, 195, 0.3);
+  border-radius: 4px;
+}
+
+.onion-msg-wrapper {
+  display: flex;
+  gap: 10px;
+  max-width: 90%;
+}
+
+.onion-msg-wrapper.user-side {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.onion-msg-wrapper.onion-side {
+  align-self: flex-start;
+}
+
+.onion-avatar-small {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 124, 195, 0.2);
+  border: 1px solid rgba(0, 124, 195, 0.4);
+  color: #007CC3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.onion-msg-bubble {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.onion-msg-bubble.onion-bubble {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 124, 195, 0.25);
+  border-left: 3px solid #007CC3;
+}
+
+.onion-msg-bubble.user-bubble {
+  background: rgba(0, 124, 195, 0.2);
+  border: 1px solid rgba(0, 124, 195, 0.4);
+  color: #f8fafc;
+}
+
+.onion-msg-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.68rem;
+  margin-bottom: 6px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.onion-sender-name {
+  font-weight: 600;
+  color: #007CC3;
+}
+
+.user-bubble .onion-sender-name {
+  color: #38bdf8;
+}
+
+.onion-code-span {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  color: #00FF41;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.76rem;
+}
+
+.onion-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.onion-chip-btn {
+  background: rgba(0, 124, 195, 0.1);
+  border: 1px solid rgba(0, 124, 195, 0.3);
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.onion-chip-btn:hover {
+  background: rgba(0, 255, 65, 0.15);
+  border-color: #00FF41;
+  color: #00FF41;
+  transform: translateY(-1px);
+}
+
+/* TYPING INDICATOR */
+.loading-bubble {
+  display: flex;
+  align-items: center;
+}
+
+.onion-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.onion-typing-indicator span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #007CC3;
+  animation: onion-typing 1.4s infinite ease-in-out;
+}
+
+.onion-typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.onion-typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.onion-typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+/* INPUT BAR */
+.onion-input-bar {
+  padding: 12px 14px;
+  background: rgba(2, 6, 10, 0.95);
+  border-top: 1px solid rgba(0, 124, 195, 0.2);
+  display: flex;
+  gap: 8px;
+}
+
+.onion-input-bar input {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(0, 124, 195, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #f8fafc;
+  font-size: 0.8rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.onion-input-bar input:focus {
+  border-color: #007CC3;
+  box-shadow: 0 0 10px rgba(0, 124, 195, 0.25);
+}
+
+.onion-send-btn {
+  background: #007CC3;
+  border: none;
+  color: white;
+  padding: 0 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.onion-send-btn:hover:not(:disabled) {
+  background: #0284c7;
+  box-shadow: 0 0 10px rgba(0, 124, 195, 0.4);
+}
+
+.onion-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* KEYFRAMES */
+@keyframes onion-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+@keyframes onion-ring {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes onion-typing {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.onion-spin {
+  animation: onion-ring 1s linear infinite;
+}

@@ -1,0 +1,68 @@
+# Implementation Plan - Profile Settings Editing & Audit Log Export (PDF / TXT)
+
+This plan addresses two tasks:
+1. **Profile Settings**: Ensure ONLY the email address is non-modifiable. All other user profile fields (Username, Full Name, Password, Date of Birth, Mobile Number, Address/Organization) must be fully editable.
+2. **Audit Logs**: Upgrade Audit Log functionality to provide two distinct download formats (**PDF** and **Text**) with clear, readable entries containing exact **Date**, **Time**, **Place/IP Location**, and **Action Details**.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Email Non-Modifiability Policy**:
+> The Email Address field will remain locked (disabled/read-only) as the primary user identity token, while Username, Password, Full Name, DOB, Mobile Phone, and Address/Organization will be editable and persisted to the MySQL database.
+>
+> **Audit Log Formats**:
+> Replaces the previous `.enc` encrypted binary format with two user-selectable formats:
+> 1. **PDF Document (.pdf)**: Structured SOC report using ReportLab with tables, headers, and metadata.
+> 2. **Plain Text Log (.txt)**: Clean structured text file with line-by-line Date, Time, Location/IP, and Description logs.
+
+---
+
+## Proposed Changes
+
+### Backend Logic
+
+#### [MODIFY] [backend/admin_routes.py](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/backend/admin_routes.py)
+- **Profile Route (`/api/admin/profile`)**:
+  - Update GET: Return `username`, `email` (read-only), `full_name`, `phone`, `organization`, `dob`, `address`, and `notification_email`.
+  - Update POST: Accept edits for `username`, `full_name`, `phone`, `organization`, `dob`, `address`, `notification_email`, and optional `new_password`.
+  - Update `users` table (`username`, `dob`, `password_hash`) and `user_profiles` table (`full_name`, `phone`, `organization`, `notification_email`, `address`).
+- **Audit Log Route (`/api/admin/audit-log`)**:
+  - Accept query parameter `format` (`pdf` or `txt`).
+  - Fetch audit records with timestamp, action, description, and `ip_address` (formatting IP into place/location string).
+  - If `format == 'pdf'`: Generate formatted ReportLab PDF containing Date, Time, Location, User, and Action details.
+  - If `format == 'txt'`: Generate readable UTF-8 text file with structured date/time/place headers.
+
+#### [MODIFY] [backend/app.py](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/backend/app.py)
+- Update DB schema initialization if needed to ensure `address` column exists in `user_profiles` or `users`.
+
+---
+
+### Frontend Components
+
+#### [MODIFY] [frontend/src/components/ProfileSettings.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/ProfileSettings.jsx)
+- Keep Email Address field disabled (read-only).
+- Make Username, Full Name, Phone Number, Organization/Address, Date of Birth (DOB), and New Password editable input fields.
+- Provide success feedback and error validation upon saving.
+
+#### [MODIFY] [frontend/src/components/AuditLog.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/AuditLog.jsx)
+- Redesign Audit Log UI:
+  - Add live preview table of recent audit log entries (showing Date, Time, Place/IP, Action, Description).
+  - Add Format Selection Cards / Radio Pill buttons:
+    - 📄 **PDF Document (.pdf)**
+    - 📝 **Text File (.txt)**
+  - Trigger download based on selected format without requiring decryption passwords.
+
+---
+
+## Verification Plan
+
+### Automated / API Tests
+- Test `/api/admin/profile` GET and POST with updated editable fields (Username, DOB, Phone, Password, Address) and verify Email remains locked.
+- Test `/api/admin/audit-log?user_id=1&format=pdf` and verify PDF file returned.
+- Test `/api/admin/audit-log?user_id=1&format=txt` and verify TXT file returned.
+
+### Manual Verification
+- Test Profile Settings UI editing in browser.
+- Test Audit Log format selection and file downloading in browser.

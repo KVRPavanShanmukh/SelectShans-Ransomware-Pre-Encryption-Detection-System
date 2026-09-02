@@ -1,0 +1,89 @@
+.session-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(6px);
+}
+
+.session-popup {
+  background: rgba(5, 10, 14, 0.95);
+  border: 1px solid var(--primary, #00FF41);
+  padding: 28px 32px;
+  border-radius: 8px;
+  width: 420px;
+  max-width: 90%;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.25), 0 0 10px rgba(0, 0, 0, 0.8);
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.session-popup h3 {
+  color: var(--primary-bright, #00FF41);
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: 1.3rem;
+  letter-spacing: 1px;
+}
+
+.session-popup p {
+  color: #e2e8f0;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.session-popup .traffic-info {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  margin-bottom: 22px;
+  padding: 10px 14px;
+  background: rgba(0, 255, 65, 0.05);
+  border: 1px solid rgba(0, 255, 65, 0.15);
+  border-radius: 4px;
+}
+
+.session-popup-actions {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.session-popup-actions button {
+  padding: 10px 22px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.session-popup-actions .btn-primary {
+  background: #007CC3;
+  border: 1px solid #007CC3;
+  color: #ffffff;
+}
+
+.session-popup-actions .btn-primary:hover {
+  background: #0284c7;
+  box-shadow: 0 0 12px rgba(0, 124, 195, 0.4);
+}
+
+.session-popup-actions .btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+}
+
+.session-popup-actions .btn-secondary:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}

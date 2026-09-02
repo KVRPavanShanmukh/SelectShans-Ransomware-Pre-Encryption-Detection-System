@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, ShieldAlert, Lock, Wifi, Printer } from 'lucide-react';
+import OnionAgent from './OnionAgent';
 
 const generateData = () =>
   Array.from({ length: 20 }, (_, i) => ({
@@ -206,22 +207,40 @@ const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
 
       </div>
 
-      {/* CHART */}
-      <div className="chart-container" style={{ marginTop: 30 }}>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={chartData}>
-            <XAxis dataKey="name" hide />
-            <YAxis />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="cpu"
-              stroke="#007CC3"
-              fill="#007CC3"
-              fillOpacity={0.2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+      {/* MAIN DASHBOARD LAYOUT GRID (Telemetry Chart + ONION AI Agent) */}
+      <div className="dashboard-grid-layout" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        
+        {/* LEFT COLUMN: REAL-TIME TELEMETRY CHART */}
+        <div className="chart-container" style={{ marginTop: 0 }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Activity size={18} style={{ color: '#007CC3' }} /> Live System Anomaly Telemetry
+          </h3>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={chartData}>
+              <XAxis dataKey="name" hide />
+              <YAxis />
+              <Tooltip />
+              <Area
+                type="monotone"
+                dataKey="cpu"
+                stroke="#007CC3"
+                fill="#007CC3"
+                fillOpacity={0.2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* RIGHT COLUMN: ONION AI AGENT */}
+        <div className="onion-container">
+          <OnionAgent 
+            userId={userId} 
+            apiBase={apiBase} 
+            onTriggerReport={generatePDF}
+            onTriggerDetectorDownload={handleDownloadDetector}
+          />
+        </div>
+
       </div>
 
     </div>

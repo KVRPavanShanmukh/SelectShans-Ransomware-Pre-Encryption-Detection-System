@@ -136,6 +136,8 @@ def init_db(pool):
             );
         """)
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('admin', 'user') DEFAULT 'user';")
+        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR(20) DEFAULT '300706';")
+        statements.append("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500);")
         statements.append("UPDATE users SET role = 'admin' WHERE username = 'admin';")
         
         conn = pool.get_connection()
@@ -537,6 +539,7 @@ def detector_log():
 
     user_id = info["user_id"]
     user_email = info["email"]
+    _active_detectors[user_id] = datetime.now(timezone.utc)
 
     event_type = data.get("event_type")
     directory = data.get("details", {}).get("directory")
@@ -589,6 +592,34 @@ SelectShans Engine
         )
 
     return jsonify({"status": "event stored"}), 200
+
+
+@app.route('/api/detector/ping', methods=['POST'])
+def detector_ping():
+    data = request.get_json() or {}
+    token = data.get("token")
+    info = verify_detector_token(token)
+
+    if not info:
+        return jsonify({"error": "Invalid token"}), 401
+
+    user_id = info["user_id"]
+    _active_detectors[user_id] = datetime.now(timezone.utc)
+    return jsonify({"status": "pong", "active": True}), 200
+
+
+@app.route('/api/detector/status', methods=['GET'])
+def detector_status():
+    user_id = request.args.get("user_id", type=int)
+    if not user_id:
+        return jsonify({"active": False}), 200
+
+    last_ping = _active_detectors.get(user_id)
+    if not last_ping:
+        return jsonify({"active": False}), 200
+
+    is_active = (datetime.now(timezone.utc) - last_ping).total_seconds() < 15
+    return jsonify({"active": is_active}), 200
 
 # =====================================================
 # LOG FILE UPLOAD
@@ -923,8 +954,13 @@ def get_realtime_stats():
         # Active connections (active detectors + active sessions)
         active_detectors_count = sum(1 for ping in _active_detectors.values() if (datetime.now(timezone.utc) - ping).total_seconds() < 15)
         
-        cursor.execute("SELECT COUNT(*) as count FROM login_sessions WHERE is_active = TRUE")
-        active_sessions = cursor.fetchone()["count"]
+        active_sessions = 0
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM login_sessions WHERE is_active = TRUE")
+            active_sessions = cursor.fetchone()["count"]
+        except Exception:
+            active_sessions = 1
+
         active_connections = max(1, active_detectors_count + active_sessions)
         
         # Chart data variation
@@ -1091,36 +1127,7 @@ def google_auth():
         return jsonify({"error": f"Authentication failed: {str(e)}"}), 401
 
 
-# =====================================================
-# DETECTOR PING AND STATUS ENDPOINTS
-# =====================================================
 
-@app.route('/api/detector/ping', methods=['POST'])
-def detector_ping():
-    data = request.get_json() or {}
-    token = data.get("token")
-    info = verify_detector_token(token)
-    if not info:
-        return jsonify({"error": "Invalid token"}), 401
-    
-    user_id = info["user_id"]
-    _active_detectors[user_id] = datetime.now(timezone.utc)
-    return jsonify({"status": "ping received"}), 200
-
-
-@app.route('/api/detector/status', methods=['GET'])
-def detector_status():
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return jsonify({"error": "user_id required"}), 400
-    
-    last_ping = _active_detectors.get(user_id)
-    is_active = False
-    if last_ping:
-        # Consider active if pinged in the last 15 seconds
-        is_active = (datetime.now(timezone.utc) - last_ping).total_seconds() < 15
-        
-    return jsonify({"active": is_active}), 200
 
 @app.route('/api/alerts', methods=['GET'])
 def get_alerts():
@@ -1155,9 +1162,237 @@ def resolve_alert(alert_id):
         conn.close()
 
 
+# =====================================================
+# ONION AI AGENT ENDPOINTS (100% Free of Cost Engine)
+# =====================================================
+
+def process_onion_query(query, user_id=None):
+    query_lower = (query or "").lower().strip()
+    
+    # 1. Fetch system context from DB
+    conn = pool.get_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    unresolved_count = 0
+    total_alerts = 0
+    protected_files = 0
+    active_detector = False
+    recent_alerts = []
+    recent_logs = []
+    
+    try:
+        cursor.execute("SELECT COUNT(*) as count FROM alerts WHERE resolved = FALSE")
+        unresolved_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM alerts")
+        total_alerts = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM process_whitelist")
+        protected_files = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT severity, process_name, trigger_reason, timestamp FROM alerts ORDER BY timestamp DESC LIMIT 5")
+        recent_alerts = cursor.fetchall()
+        for a in recent_alerts:
+            if a.get("timestamp"):
+                a["timestamp"] = a["timestamp"].isoformat()
+                
+        if user_id:
+            cursor.execute("SELECT event_type, directory, event_count, created_at FROM detector_logs WHERE user_id = %s ORDER BY created_at DESC LIMIT 5", (user_id,))
+            recent_logs = cursor.fetchall()
+            for l in recent_logs:
+                if l.get("created_at"):
+                    l["created_at"] = l["created_at"].isoformat()
+                    
+            last_ping = _active_detectors.get(user_id)
+            if last_ping:
+                active_detector = (datetime.now(timezone.utc) - last_ping).total_seconds() < 15
+    except Exception as err:
+        print("ONION context query error:", err)
+    finally:
+        cursor.close()
+        conn.close()
+        
+    anomaly_score = min(99, max(5, unresolved_count * 30 + 10))
+    threat_level = "CRITICAL 🔴" if anomaly_score > 70 else "MEDIUM 🟡" if anomaly_score > 40 else "LOW 🟢"
+    detector_status_str = "ACTIVE & STREAMING 🟢" if active_detector else "OFFLINE ⚠️"
+    
+    # 2. Intent matching & Intelligent Dynamic Responses
+    
+    # A. Greetings / Intro
+    if any(w in query_lower for w in ["hi", "hello", "who are you", "what is onion", "help", "introduce"]):
+        return {
+            "reply": (
+                "👋 **Greetings! I am ONION — your AI Security Sentinel & SOC Assistant.**\n\n"
+                "I actively monitor system behavior, telemetry, process whitelists, and pre-encryption anomaly triggers to protect your environment from ransomware threats.\n\n"
+                f"📊 **Current System Overview:**\n"
+                f"• **Anomaly Score:** `{anomaly_score}%` (Threat Level: {threat_level})\n"
+                f"• **Host Detector:** {detector_status_str}\n"
+                f"• **Unresolved Alerts:** `{unresolved_count}`\n"
+                f"• **Whitelisted Processes:** `{protected_files}`\n\n"
+                "How can I assist you today? You can ask me to analyze threats, check host status, explain detection mechanics, or generate report summaries."
+            ),
+            "quick_actions": ["Analyze security status", "Are there active threats?", "How does pre-encryption detection work?", "Generate PDF Security Report"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # B. Security status / anomaly check
+    elif any(w in query_lower for w in ["status", "system status", "health", "overview", "score", "anomaly"]):
+        status_msg = (
+            f"🛡️ **ONION System Diagnostic Report:**\n\n"
+            f"• **Anomaly Score:** `{anomaly_score}%` — Status is **{threat_level}**\n"
+            f"• **Host Detector Agent:** {detector_status_str}\n"
+            f"• **Active Connection Count:** `{1 if active_detector else 0}` telemetry stream(s)\n"
+            f"• **Protected Executables:** `{protected_files}` whitelisted binaries\n"
+            f"• **Pending Alerts:** `{unresolved_count}` unresolved incident(s)\n\n"
+        )
+        if unresolved_count > 0:
+            status_msg += "⚠️ **Attention Required:** You have unresolved critical alerts in the system. Review them in the Alerts tab or ask me for details."
+        else:
+            status_msg += "✅ **All Clear:** No active pre-encryption ransomware activity detected on protected drives."
+            
+        return {
+            "reply": status_msg,
+            "quick_actions": ["View recent alerts", "Generate Security Report", "Check Whitelist"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # C. Active threats / Alerts
+    elif any(w in query_lower for w in ["threat", "alert", "incident", "attack", "suspicious", "mass rename", "entropy"]):
+        if not recent_alerts:
+            return {
+                "reply": "🟢 **No Active Alerts Found.**\n\nNo threat alerts have been logged in the system. The FolderGuard engine is continuously watching process write rates and directory entropy spikes.",
+                "quick_actions": ["Analyze security status", "Check detector status"],
+                "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": 0}
+            }
+            
+        alert_lines = []
+        for a in recent_alerts[:4]:
+            sev = a.get("severity", "INFO")
+            proc = a.get("process_name", "Unknown")
+            reason = a.get("trigger_reason", "No details")
+            alert_lines.append(f"• `[{sev}]` **{proc}**: {reason}")
+            
+        reply_txt = (
+            f"🚨 **Recent Threat & Incident Summary ({len(recent_alerts)} shown):**\n\n" +
+            "\n".join(alert_lines) +
+            f"\n\nCurrently **{unresolved_count}** alerts require resolution. Would you like me to guide you on automated SOAR response steps?"
+        )
+        return {
+            "reply": reply_txt,
+            "quick_actions": ["How to handle mass rename?", "Generate Security Report", "Analyze security status"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # D. How pre-encryption detection works
+    elif any(w in query_lower for w in ["how", "pre-encryption", "work", "detection", "soar", "mechanics"]):
+        return {
+            "reply": (
+                "🔒 **How Ransomware Pre-Encryption Detection Works:**\n\n"
+                "Traditional antivirus relies on signature databases that fail against modern zero-day ransomware. **SelectShans & ONION** use behavior-based anomaly monitoring:\n\n"
+                "1. **FolderGuard Monitoring:** Tracks rapid file renames (`.locked`, `.crypto`, `.enc`) before encryption finishes.\n"
+                "2. **Entropy Measurement:** Detects mathematical chaos spikes in document buffers before files are replaced.\n"
+                "3. **Canary File Decoys:** Drops hidden canary files in user directories; if modified, suspicious PIDs are suspended immediately.\n"
+                "4. **Automated SOAR Action:** Suspends malicious PIDs and triggers instant Nodemailer security alerts to admins."
+            ),
+            "quick_actions": ["Check detector status", "Analyze security status", "Download host detector"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # E. Whitelist / Processes
+    elif any(w in query_lower for w in ["whitelist", "process", "binary", "allowed", "trusted"]):
+        return {
+            "reply": (
+                f"⚙️ **Process Whitelist Policy:**\n\n"
+                f"There are currently **{protected_files}** whitelisted process executables configured in the system.\n\n"
+                "Whitelisted binaries (such as `explorer.exe`, `svchost.exe`, `python.exe`) are allowed to perform rapid file updates without triggering automated process suspension.\n\n"
+                "💡 *Tip: You can manage whitelisted binaries inside the Settings tab.*"
+            ),
+            "quick_actions": ["Analyze security status", "View active alerts"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # F. Detector agent status / Download
+    elif any(w in query_lower for w in ["detector", "download", "agent", "folderguard", "offline", "ping"]):
+        if active_detector:
+            det_reply = (
+                "🟢 **Host Detector Agent is ONLINE.**\n\n"
+                "Your local FolderGuard host agent is actively pinging the backend every 3 seconds, streaming real-time file event logs and telemetry."
+            )
+        else:
+            det_reply = (
+                "⚠️ **Host Detector Agent is OFFLINE.**\n\n"
+                "To enable live telemetry flow and automated pre-encryption defense on your host computer:\n"
+                "1. Click **Download Detector** on the home page.\n"
+                "2. Extract `SelectShans-FolderGuard.zip`.\n"
+                "3. Execute `python monitor.py` on your machine."
+            )
+        return {
+            "reply": det_reply,
+            "quick_actions": ["Download detector agent", "Analyze security status"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # G. Report generation
+    elif any(w in query_lower for w in ["report", "pdf", "generate", "download report", "summary report"]):
+        return {
+            "reply": (
+                "📑 **Security & Threat Intelligence PDF Report:**\n\n"
+                "I can generate a real-time PDF executive summary containing:\n"
+                "• Anomaly KPIs & Threat Level breakdown\n"
+                "• Telemetry event frequency chart\n"
+                "• Detailed alert incident log & whitelist posture\n\n"
+                "Click **Generate Report** on the home dashboard or trigger it below!"
+            ),
+            "quick_actions": ["Generate Security Report", "Analyze security status"],
+            "action_trigger": "generate_report",
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+        
+    # H. Default / General Query Handling
+    else:
+        return {
+            "reply": (
+                f"🧠 **ONION Security Intelligence Analysis:**\n\n"
+                f"Regarding *\"{query}\"*:\n\n"
+                f"Based on real-time telemetry, your current system anomaly score is `{anomaly_score}%` with `{unresolved_count}` active alerts and `{protected_files}` whitelisted binaries.\n\n"
+                "I am monitoring all incoming filesystem calls, entropy spikes, and suspicious process executions. Is there a specific security action, alert review, or diagnostic test you'd like me to perform?"
+            ),
+            "quick_actions": ["Analyze security status", "Are there active threats?", "How does pre-encryption detection work?"],
+            "status": {"anomaly_score": anomaly_score, "detector": active_detector, "alerts": unresolved_count}
+        }
+
+
+@app.route('/api/onion/chat', methods=['POST'])
+def onion_chat():
+    data = request.get_json() or {}
+    query = data.get("query", "")
+    user_id = data.get("user_id")
+    
+    if not query:
+        return jsonify({"error": "Query string is required"}), 400
+        
+    try:
+        response = process_onion_query(query, user_id)
+        return jsonify(response), 200
+    except Exception as e:
+        print("Error in ONION AI Agent route:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/onion/diagnose', methods=['GET'])
+def onion_diagnose():
+    user_id = request.args.get('user_id', type=int)
+    try:
+        diag = process_onion_query("status", user_id)
+        return jsonify(diag), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(send_daily_summary, 'cron', hour=9)
 scheduler.start()
+
 
 
 # =====================================================

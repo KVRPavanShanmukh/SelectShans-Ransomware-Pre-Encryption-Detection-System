@@ -14,6 +14,7 @@ import SOAR from './components/SOAR';
 import BetaLogin from './components/BetaLogin';
 import BetaTerminal from './components/BetaTerminal';
 import Mailer from './components/Mailer';
+import SessionManager from './components/SessionManager';
 import './App.css';
 
 function App() {
@@ -112,6 +113,7 @@ function App() {
           <div className="search-bar">
             <input type="text" placeholder="Search logs, hashes, PIDs, paths..." />
           </div>
+          <SessionManager onLogout={handleLogout} />
           <div className="user-profile" style={{ position: 'relative' }}>
             <span className="status-badge">Admin: Active</span>
             <div
