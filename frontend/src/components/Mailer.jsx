@@ -49,9 +49,13 @@ const Mailer = ({ userId }) => {
   return (
     <div className="dashboard-content">
       <div className="card" style={{ maxWidth: 600, margin: '0 auto', marginTop: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, borderBottom: '1px solid rgba(0,255,65,0.2)', paddingBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, borderBottom: '1px solid rgba(0,255,65,0.2)', paddingBottom: 16 }}>
           <Mail size={24} color="var(--primary-bright)" />
           <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text)' }}>Mail Dispatch</h2>
+        </div>
+
+        <div style={{ background: 'rgba(255, 204, 0, 0.1)', border: '1px solid #ffcc00', color: '#ffcc00', padding: '10px 14px', borderRadius: 4, fontSize: '0.8rem', marginBottom: 20, fontFamily: 'monospace' }}>
+          ℹ <strong>System Notice:</strong> Mail dispatch is currently disabled. All alert triggers are logged locally to the database.
         </div>
 
         <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

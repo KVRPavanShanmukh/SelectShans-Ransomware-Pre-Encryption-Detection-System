@@ -9,7 +9,6 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
     { id: 'protection', label: 'Active Shield', icon: <ShieldCheck size={18} /> },
     { id: 'encryption', label: 'Encryption Lab', icon: <Lock size={18} /> },
     { id: 'soar', label: 'SOAR Panel', icon: <Zap size={18} /> },
-    { id: 'mailer', label: 'Mail Dispatch', icon: <Mail size={18} /> },
   ];
 
   return (

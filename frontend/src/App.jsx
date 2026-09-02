@@ -13,7 +13,6 @@ import Signup from './components/Signup';
 import SOAR from './components/SOAR';
 import BetaLogin from './components/BetaLogin';
 import BetaTerminal from './components/BetaTerminal';
-import Mailer from './components/Mailer';
 import SessionManager from './components/SessionManager';
 import './App.css';
 
@@ -172,7 +171,6 @@ function App() {
           {!adminTab && activeTab === 'protection' && <ActiveShield />}
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
           {!adminTab && activeTab === 'soar' && <SOAR userId={userId} />}
-          {!adminTab && activeTab === 'mailer' && <Mailer userId={userId} />}
           {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase="http://127.0.0.1:5000" onNavigate={handleAdminNavigation} /> }
           
           {!adminTab && activeTab === 'beta' && !betaToken && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, ShieldAlert, Lock, Wifi, Printer } from 'lucide-react';
 import OnionAgent from './OnionAgent';
+import HostActivityList from './HostActivityList';
 
 const generateData = () =>
   Array.from({ length: 20 }, (_, i) => ({
@@ -242,6 +243,9 @@ const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
         </div>
 
       </div>
+
+      {/* DOWNLOADABLE APP LIVE ANOMALOUS ACTIVITY STREAM */}
+      <HostActivityList userId={userId} apiBase={apiBase} />
 
     </div>
   );

@@ -38,6 +38,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
       });
       const data = await response.json();
       if (response.ok) {
+        if (data.code) setCode(data.code);
         setStep(1);
       } else {
         setError(data.error || 'Failed to request GHOST access');

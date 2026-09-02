@@ -46,6 +46,8 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
       if (response.ok && data.pending) {
         setIdentifier(data.identifier);
+        if (data.otp) setOtp(data.otp);
+        if (data.psk) setPsk(data.psk);
         setStep(1);
       } else {
         setError(data.error || 'Invalid credentials');

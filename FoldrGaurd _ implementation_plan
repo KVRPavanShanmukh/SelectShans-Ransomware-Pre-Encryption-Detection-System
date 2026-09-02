@@ -1,0 +1,75 @@
+# Implementation Plan - Downloadable Application & Website Communication & Anomaly Alert Sync
+
+Establish full two-way communication between the downloadable **FolderGuard Agent** (downloadable application) and the **SelectShans Website**. The downloadable agent will monitor user-specified folders for anomalous activities, compile a detailed **Anomalous Activity List**, share this list with the website for live internal verification, and trigger the website to automatically send instant email notifications to the user whenever anomalous behavior is detected.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Communication & Workflow Steps**:
+> 1. **User-Specified Folder Monitoring**: The downloadable application prompts the user for a folder to monitor (with default fallback from `config.json`).
+> 2. **Anomalous Activity Marking & List Creation**: The application detects anomalous behaviors (mass renames, entropy surges, rapid writes, canary file breaches), marks each occurrence, and appends it to a structured local and in-memory activity list.
+> 3. **Syncing List to Website**: The activity list is automatically pushed to the website's backend server (`/api/detector/sync-activities` & `/api/detector/log`).
+> 4. **Automated Website Email Trigger**: Upon detecting anomalous behavior during list creation, the downloadable app sends an urgent trigger payload to the website, which executes `send_email_safe` (Nodemailer) to email the user.
+> 5. **Website Verification UI**: The website renders a real-time **Host Anomalous Activity List** widget on the Dashboard, allowing users to inspect internal filesystem activities in real time.
+
+---
+
+## Proposed Changes
+
+### Downloadable Application (`backend/detector_package/detector.py`)
+
+#### [MODIFY] [backend/detector_package/detector.py](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/backend/detector_package/detector.py)
+- Enhance `detector.py`:
+  - **Folder Selection**: Prompts user for target directory or loads from `config.json`.
+  - **Anomalous Activity List**: Maintains `anomalous_activities` array containing `id`, `timestamp`, `event_type`, `directory`, `target_file`, `severity`, `event_count`, and `action_taken`.
+  - **Detection Logic**: Monitor file moves (`on_moved`), file modifications (`on_modified`), and canary files for mass renames, rapid writes, and entropy surges.
+  - **List Syncing & Website Trigger**:
+    - Sends periodic and event-driven updates to `/api/detector/sync-activities` on the website.
+    - Sends immediate critical alert triggers to `/api/detector/log` which instructs the website server to send an automated email to the user.
+
+---
+
+### Backend API Server (`backend/app.py`)
+
+#### [MODIFY] [backend/app.py](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/backend/app.py)
+- **Database Schema**: Add `detector_activities` table if missing, or store synced activity list entries into `detector_logs` & `alerts`.
+- **API Endpoint `/api/detector/sync-activities` (POST)**:
+  - Receives synced anomalous activity list from downloadable agent.
+  - Saves activity entries into the database associated with `user_id`.
+- **API Endpoint `/api/detector/log` (POST)**:
+  - Enhanced to handle anomalous behavior triggers.
+  - Automatically calls `send_email_safe(user_email, ...)` to send an instant email to the user.
+- **API Endpoint `/api/detector/activities` (GET)**:
+  - Returns the list of anomalous activities for the logged-in user so the website can display them.
+
+---
+
+### Frontend Website UI (`frontend/src/components/Dashboard.jsx` & `OnionAgent.jsx`)
+
+#### [NEW] [frontend/src/components/HostActivityList.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/HostActivityList.jsx)
+- Build a real-time **Host Anomalous Activity List** component:
+  - Displays monitored folder path and live agent status.
+  - Table/Card list showing synced internal activities (Event Type, Target File/Folder, Severity Badge, Timestamp, Action Taken, Email Alert Delivered Indicator).
+  - Refresh button & auto-polling every 3 seconds.
+
+#### [MODIFY] [frontend/src/components/Dashboard.jsx](file:///d:/HACK-LEARNATHONS/LEARNATHON%20SLOT%203/FINAL/PRO/PRO/frontend/src/components/Dashboard.jsx)
+- Embed `HostActivityList` on the Dashboard so users can verify internal activities occurring on their host machine.
+
+---
+
+## Verification Plan
+
+### Automated / API Verification
+- Test `/api/detector/sync-activities` POST payload with sample anomalous activity list.
+- Test `/api/detector/log` POST payload with `mass_rename` and verify Nodemailer email trigger.
+- Test `/api/detector/activities?user_id=1` GET endpoint and verify JSON array returned.
+- Compile Python backend scripts (`python -m py_compile backend/app.py backend/detector_package/detector.py`).
+
+### Manual Verification
+- Run `detector.py` on a sample folder, simulate rapid file renames/creations, and verify:
+  1. Anomalous activity is marked and added to the local list.
+  2. Activity list is shared to the website.
+  3. Website sends an alert email to the user.
+  4. Website Dashboard displays the live activity list for internal verification.
