@@ -1,17 +1,17 @@
-# 🛡 SentinelStream: Ransomware Pre-Encryption Detection System
+# SentinelStream: Ransomware Pre-Encryption Detection System
 
 A proactive ransomware detection system that identifies suspicious file behavior **before large-scale encryption occurs**, using anomaly monitoring and threshold-based analysis.
 
 ---
 
-## 🚀 Project Overview
+## Project Overview
 
 Ransomware attacks often encrypt files rapidly, causing irreversible damage before detection.  
 This project shifts the detection model from **reactive to proactive** by monitoring file system behavior and detecting anomalies such as:
 
 - Rapid file renaming
 - Mass file modifications within a short time window
-- Suspicious file activity patterns
+- Suspicious file activity patterns 
 
 Once detected, the system:
 - Logs the event securely
@@ -21,7 +21,7 @@ Once detected, the system:
 
 ---
 
-## 🧠 Key Features
+## Key Features
 
 - 🔍 Real-time file system monitoring (Watchdog)
 - ⚡ Threshold-based anomaly detection
