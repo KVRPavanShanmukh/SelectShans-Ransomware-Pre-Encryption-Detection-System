@@ -1,4 +1,4 @@
-# SentinelStream: Ransomware Pre-Encryption Detection System
+# SelectShans: Ransomware Pre-Encryption Detection System
 
 A proactive ransomware detection system that identifies suspicious file behavior **before large-scale encryption occurs**, using anomaly monitoring and threshold-based analysis.
 
