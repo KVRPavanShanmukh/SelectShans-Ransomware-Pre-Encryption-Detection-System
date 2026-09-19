@@ -146,7 +146,10 @@ const EncryptionLab = () => {
             {/* Header */}
             <div className="enc-lab-header">
                 <AlertTriangle size={22} color="var(--warning)" />
-                <h2>Encryption Lab</h2>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    Encryption Lab
+                    <span style={{fontSize: '0.65rem', color: '#f59e0b', background: '#f59e0b20', padding: '2px 6px', borderRadius: 4, letterSpacing: '2px'}}>SIMULATION</span>
+                </h2>
                 <div className={`enc-status-bar ${status}`} style={{ marginLeft: 'auto', minWidth: 280 }}>
                     <span className="status-dot" />
                     <span>{statusText[status]}</span>

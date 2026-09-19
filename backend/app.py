@@ -143,12 +143,18 @@ def init_db(pool):
                 directory VARCHAR(500),
                 target_file VARCHAR(500),
                 severity VARCHAR(20) DEFAULT 'MEDIUM',
+                score INT DEFAULT 0,
+                detector_id VARCHAR(50),
+                hostname VARCHAR(100),
                 event_count INT DEFAULT 1,
                 action_taken VARCHAR(255),
                 process_name VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS score INT DEFAULT 0;")
+        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS detector_id VARCHAR(50);")
+        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS hostname VARCHAR(100);")
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('admin', 'user') DEFAULT 'user';")
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR(20) DEFAULT '300706';")
         statements.append("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500);")
@@ -215,19 +221,39 @@ _active_detectors = {}
 
 def send_email_safe(to_email, subject, body, attachment_path=None):
     try:
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "send_mail.js")
-        cmd = ["node", script_path, to_email, subject, body]
-        if attachment_path:
-            cmd.append(attachment_path)
+        msg = MIMEMultipart()
+        msg['From'] = os.getenv("MAIL_USER", "no-reply@selectshans.local")
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename= {os.path.basename(attachment_path)}")
+            msg.attach(part)
             
-        print("Running Nodemailer script:", cmd)
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        print("Nodemailer Output:", res.stdout)
+        smtp_server = os.getenv("MAIL_HOST", "localhost")
+        smtp_port = int(os.getenv("MAIL_PORT", 25))
+        smtp_user = os.getenv("MAIL_USER")
+        smtp_pass = os.getenv("MAIL_PASS")
+        
+        # Don't try to connect if no real SMTP server is configured and we're not running a local one
+        if smtp_server == "localhost" and not smtp_user:
+            print("Simulated Email Sent (No SMTP configured):", to_email, subject)
+            return True
+            
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        if smtp_user and smtp_pass:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
         return True
     except Exception as e:
-        print("Nodemailer execution failed:", e)
-        if hasattr(e, 'stderr') and e.stderr:
-            print("Stderr:", e.stderr)
+        print("SMTP execution failed:", e)
         return False
 
 # =====================================================
@@ -317,7 +343,7 @@ def login():
         f"OTP: {otp}\nPSK: {psk}\nValid for {OTP_EXPIRY} minutes."
     )
 
-    return jsonify({"pending": True, "identifier": email, "otp": otp, "psk": psk}), 200
+    return jsonify({"pending": True, "identifier": email}), 200
 
 
 @app.route('/api/login/verify', methods=['POST'])
@@ -414,7 +440,13 @@ def beta_login():
         expected_full_code += int_otp[i] + str_otp[i]
     expected_full_code += int_otp[3]
 
-    return jsonify({"message": "Beta OTP generated", "code": expected_full_code, "int_otp": int_otp, "str_otp": str_otp}), 200
+    send_email_safe(
+        email,
+        "SelectShans Beta Terminal Access",
+        f"Your Beta Terminal Access Code is: {expected_full_code}\nValid for 5 minutes."
+    )
+
+    return jsonify({"message": "Beta OTP generated and sent to email"}), 200
 
 @app.route('/api/beta/verify', methods=['POST'])
 @token_required
@@ -450,7 +482,7 @@ def beta_verify():
     # Generate a special beta token
     beta_token = jwt.encode(
         {"user_id": current_user["user_id"], "beta_access": True, "exp": datetime.now(timezone.utc) + timedelta(hours=2)},
-        os.getenv("JWT_SECRET", "sentinelstream_super_secure_random_string_change_this_12345"),
+        os.getenv("JWT_SECRET", "default_secret_please_change"),
         algorithm="HS256"
     )
     
@@ -471,7 +503,7 @@ def beta_terminal():
     try:
         decoded = jwt.decode(
             beta_token, 
-            os.getenv("JWT_SECRET", "sentinelstream_super_secure_random_string_change_this_12345"), 
+            os.getenv("JWT_SECRET", "default_secret_please_change"), 
             algorithms=["HS256"]
         )
         if not decoded.get("beta_access"):
@@ -637,14 +669,17 @@ def detector_sync_activities():
             directory = act.get("directory", "User Monitored Folder")
             target_file = act.get("target_file", "")
             severity = act.get("severity", "MEDIUM")
+            score = act.get("score", 0)
+            detector_id = act.get("detector_id", "unknown")
+            hostname = act.get("hostname", "unknown")
             event_count = act.get("event_count", 1)
             action_taken = act.get("action_taken", "Marked & Logged by FolderGuard")
             process_name = act.get("process_name", "FolderGuard Agent")
 
             cursor.execute("""
-                INSERT INTO detector_activities (user_id, event_type, directory, target_file, severity, event_count, action_taken, process_name)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, event_type, directory, target_file, severity, event_count, action_taken, process_name))
+                INSERT INTO detector_activities (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name))
             
             synced_count += 1
             
@@ -701,7 +736,7 @@ def get_detector_activities():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, event_type, directory, target_file, severity, event_count, action_taken, process_name, created_at
+            SELECT id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, created_at
             FROM detector_activities
             WHERE user_id = %s OR user_id IS NULL
             ORDER BY created_at DESC LIMIT 100
@@ -776,6 +811,88 @@ def upload_log():
         return jsonify({"status": "Log file sent"}), 200
     else:
         return jsonify({"error": "Failed to send email"}), 500
+
+# =====================================================
+# STATIC FILE ANALYSIS
+# =====================================================
+import math
+
+def calculate_entropy(data):
+    if not data:
+        return 0.0
+    entropy = 0
+    for x in range(256):
+        p_x = float(data.count(x)) / len(data)
+        if p_x > 0:
+            entropy += - p_x * math.log(p_x, 2)
+    return entropy
+
+@app.route('/api/analyze-file', methods=['POST'])
+@token_required
+def analyze_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        # Read file into memory (limit size for safety, e.g., max 10MB)
+        file_data = file.read(10 * 1024 * 1024)
+        
+        # Calculate SHA-256
+        file_hash = hashlib.sha256(file_data).hexdigest()
+        
+        # Calculate size
+        file_size = len(file_data)
+        
+        # Calculate entropy
+        entropy = calculate_entropy(file_data)
+        
+        # Extract extension
+        ext = os.path.splitext(file.filename)[1].lower()
+        
+        # Basic heuristic analysis
+        suspicious_extensions = ['.locked', '.crypto', '.enc', '.crypted', '.ransom', '.wnry', '.zepto']
+        
+        risk_score = 10
+        indicators = []
+        
+        if ext in suspicious_extensions:
+            risk_score += 60
+            indicators.append(f"Suspicious file extension detected: {ext}")
+            
+        if entropy > 7.5:
+            risk_score += 30
+            indicators.append(f"High entropy ({entropy:.2f}) indicates encrypted or compressed payload.")
+        elif entropy > 7.0:
+            risk_score += 15
+            indicators.append(f"Elevated entropy ({entropy:.2f}).")
+            
+        if ext in ['.exe', '.dll', '.scr', '.bat', '.cmd', '.vbs', '.js']:
+            risk_score += 20
+            indicators.append(f"Executable script or binary format ({ext}).")
+            
+        severity = "LOW"
+        if risk_score > 70:
+            severity = "HIGH"
+        elif risk_score > 40:
+            severity = "MEDIUM"
+            
+        return jsonify({
+            "filename": file.filename,
+            "sha256": file_hash,
+            "size": file_size,
+            "entropy": round(entropy, 2),
+            "risk_score": min(risk_score, 100),
+            "severity": severity,
+            "indicators": indicators
+        }), 200
+        
+    except Exception as e:
+        print("Analysis error:", e)
+        return jsonify({"error": "Analysis failed"}), 500
 
 
 # =====================================================

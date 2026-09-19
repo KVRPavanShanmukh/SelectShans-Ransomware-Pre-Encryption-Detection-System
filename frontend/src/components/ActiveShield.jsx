@@ -59,8 +59,9 @@ const ActiveShield = () => {
               : <ShieldCheck size={40} color="#10b981" />
             }
             <div>
-              <h2 style={{ color: lockdownActive ? '#ef4444' : '#10b981' }}>
+              <h2 style={{ color: lockdownActive ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 10 }}>
                 {lockdownActive ? 'LOCKDOWN ACTIVE' : 'Active Shield: SECURE'}
+                <span style={{fontSize: '0.65rem', color: '#f59e0b', background: '#f59e0b20', padding: '2px 6px', borderRadius: 4, letterSpacing: '2px'}}>SIMULATION</span>
               </h2>
               <p className="subtext">Monitoring pre-encryption signatures in real-time</p>
             </div>

@@ -5,6 +5,8 @@ import requests
 import threading
 from datetime import datetime
 from collections import deque
+import socket
+import uuid
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -30,6 +32,9 @@ USER_EMAIL = config.get("email", "")
 # ==============================
 # SETTINGS & LISTS
 # ==============================
+
+HOSTNAME = socket.gethostname()
+DETECTOR_ID = str(uuid.uuid4())
 
 RENAME_THRESHOLD = 4
 WRITE_THRESHOLD = 10
@@ -112,12 +117,22 @@ def sync_activities_to_website():
 
 def mark_anomalous_activity(event_type, directory, target_file, severity, count, action_taken, process_name="FolderGuard Agent"):
     """Marks an anomalous activity and adds it to the list shared with the website."""
+    
+    score = count * 10
+    if severity == "CRITICAL":
+        score += 50
+    elif severity == "HIGH":
+        score += 30
+        
     activity_entry = {
         "id": f"act_{int(time.time()*1000)}",
+        "detector_id": DETECTOR_ID,
+        "hostname": HOSTNAME,
         "event_type": event_type,
         "directory": directory,
         "target_file": target_file,
         "severity": severity,
+        "score": min(score, 100),
         "event_count": count,
         "action_taken": action_taken,
         "process_name": process_name,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Save, Lock, User, Mail, Calendar, Phone, Building, MapPin, Key } from 'lucide-react';
 
-const ProfileSettings = ({ userId, apiBase = 'http://127.0.0.1:5000', onBack }) => {
+const ProfileSettings = ({ userId, apiBase = '', onBack }) => {
     const [profile, setProfile] = useState({
         username: '',
         email: '',

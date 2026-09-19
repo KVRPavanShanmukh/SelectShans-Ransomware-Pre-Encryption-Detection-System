@@ -9,7 +9,7 @@ const generateData = () =>
     cpu: Math.floor(Math.random() * 50) + 10,
   }));
 
-const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
+const Dashboard = ({ userId, apiBase = '' }) => {
   const [detectorActive, setDetectorActive] = useState(false);
   const [chartData, setChartData] = useState(Array.from({ length: 20 }, (_, i) => ({ name: i, cpu: 0 })));
   const [anomalyScore, setAnomalyScore] = useState(0);

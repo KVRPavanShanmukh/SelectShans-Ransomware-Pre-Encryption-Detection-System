@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Play, CheckCircle, AlertOctagon, RefreshCw, Send, Radio } from 'lucide-react';
 
-const SOAR = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
+const SOAR = ({ userId, apiBase = '' }) => {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeIncident, setActiveIncident] = useState(null);

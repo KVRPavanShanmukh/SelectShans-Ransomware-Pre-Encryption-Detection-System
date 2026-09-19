@@ -1,9 +1,10 @@
 """
 Admin API routes for SentinelStream / SelectShans SOC
 """
-from flask import jsonify, request, send_file
+from flask import jsonify, request, send_file, g
 from datetime import datetime
 from werkzeug.security import generate_password_hash
+from jwt_utils import token_required
 import io
 import base64
 import hashlib
@@ -21,9 +22,10 @@ def register_admin_routes(app, pool):
     """Register all admin-related routes"""
     
     @app.route('/api/admin/log-retention', methods=['GET', 'POST'])
+    @token_required
     def handle_log_retention():
         data = request.get_json() if request.method == 'POST' else None
-        user_id = data.get('user_id') if data else request.args.get('user_id')
+        user_id = g.user['user_id']
         
         conn = pool.get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -57,9 +59,9 @@ def register_admin_routes(app, pool):
     
     
     @app.route('/api/admin/clear-data', methods=['POST'])
+    @token_required
     def clear_all_data():
-        data = request.get_json()
-        user_id = data.get('user_id')
+        user_id = g.user['user_id']
         
         conn = pool.get_connection()
         cursor = conn.cursor()
@@ -86,9 +88,10 @@ def register_admin_routes(app, pool):
     
     
     @app.route('/api/admin/profile', methods=['GET', 'POST'])
+    @token_required
     def handle_profile():
         data = request.get_json() if request.method == 'POST' else None
-        user_id = data.get('user_id') if data else request.args.get('user_id')
+        user_id = g.user['user_id']
         
         if not user_id:
             return jsonify({"error": "user_id is required"}), 400
@@ -185,8 +188,9 @@ def register_admin_routes(app, pool):
     
     
     @app.route('/api/admin/audit-log', methods=['GET'])
+    @token_required
     def get_audit_log():
-        user_id = request.args.get('user_id')
+        user_id = g.user['user_id']
         log_format = request.args.get('format', 'pdf').lower().strip() # 'pdf', 'txt', or 'json'
         
         conn = pool.get_connection()
