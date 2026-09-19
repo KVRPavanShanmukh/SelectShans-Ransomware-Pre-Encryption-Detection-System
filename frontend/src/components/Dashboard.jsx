@@ -76,7 +76,7 @@ const Dashboard = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
       alert("Detector token missing. Please login again.");
       return;
     }
-    window.location.href = `${apiBase}/api/detector-download?token=${token}`;
+    window.location.href = `${apiBase}/api/detector-download?token=${encodeURIComponent(token)}`;
   };
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
