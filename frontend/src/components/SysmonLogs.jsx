@@ -50,6 +50,7 @@ const SysmonLogs = () => {
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.8rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase' }}>
             <Database size={18} color="#007CC3" />
             Sysmon Correlation Engine
+            <span style={{fontSize: '0.65rem', color: '#f59e0b', background: '#f59e0b20', padding: '2px 6px', borderRadius: 4, marginLeft: 8}}>DEMO MODE</span>
           </h3>
           <div className="search-bar">
             <Search size={14} color="#94a3b8" />

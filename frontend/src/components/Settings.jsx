@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Settings as SettingsIcon, Shield, Bell, Eye, Database, Lock, Download, Trash2, User, FileText, Activity } from 'lucide-react';
 
-const Settings = ({ detectorToken, apiBase = 'http://127.0.0.1:5000', userId, onNavigate }) => {
+const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
     const [telemetry, setTelemetry] = useState(false);
     const [remoteSupport, setRemoteSupport] = useState(false);
     const [autoUpdate, setAutoUpdate] = useState(true);

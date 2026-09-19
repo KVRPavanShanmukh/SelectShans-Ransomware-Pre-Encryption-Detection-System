@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, RefreshCw, Mail, Activity, Folder, CheckCircle, AlertTriangle, Cpu } from 'lucide-react';
 
-const HostActivityList = ({ userId, apiBase = 'http://127.0.0.1:5000' }) => {
+const HostActivityList = ({ userId, apiBase = '' }) => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detectorActive, setDetectorActive] = useState(false);

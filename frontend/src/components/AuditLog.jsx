@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Download, FileText, File, Calendar, MapPin, Activity, RefreshCw } from 'lucide-react';
 
-const AuditLog = ({ userId, apiBase = 'http://127.0.0.1:5000', onBack }) => {
+const AuditLog = ({ userId, apiBase = '', onBack }) => {
     const [exportFormat, setExportFormat] = useState('pdf'); // 'pdf' or 'txt'
     const [downloading, setDownloading] = useState(false);
     const [logs, setLogs] = useState([]);

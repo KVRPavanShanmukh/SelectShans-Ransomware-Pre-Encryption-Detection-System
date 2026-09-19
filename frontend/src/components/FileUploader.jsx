@@ -20,7 +20,7 @@ const FileUploader = ({ onLogsUploaded }) => {
     setWarning('');
   };
 
-  const startAnalysis = () => {
+  const startAnalysis = async () => {
     if (files.length === 0) {
       setWarning('SELECT FILES BEFORE SCANNING');
       return;
@@ -29,34 +29,40 @@ const FileUploader = ({ onLogsUploaded }) => {
     setScanResult(null);
     setWarning('');
 
-    // Simulate threat analysis with random safe/threat outcome
-    setTimeout(() => {
-      setIsScanning(false);
-      const score = Math.floor(Math.random() * 100);
+    try {
+      const formData = new FormData();
+      formData.append('file', files[0]); // Analyze first file for now
 
-      if (score >= 50) {
-        setScanResult({
-          verdict: 'threat',
-          status: 'Anomaly Detected',
-          score,
-          threats: [
-            'Mass File Rename Pattern Found (Event ID 11)',
-            'Unusual Resource Spike (CPU/Disk) detected',
-            'High Entropy File Modification — possible encryption',
-            'Registry persistence key added (HKLM/Run)',
-          ],
-        });
-      } else {
-        setScanResult({
-          verdict: 'safe',
-          status: 'No Threats Detected',
-          score,
-          threats: [],
-        });
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/analyze-file', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Analysis request failed');
       }
 
+      const data = await response.json();
+      const verdict = data.severity === 'HIGH' || data.severity === 'CRITICAL' ? 'threat' : 'safe';
+
+      setScanResult({
+        verdict: verdict,
+        status: verdict === 'threat' ? 'Anomaly Detected' : 'No Threats Detected',
+        score: data.risk_score,
+        threats: data.indicators || [],
+      });
+
       if (onLogsUploaded) onLogsUploaded();
-    }, 3000);
+    } catch (err) {
+      console.error(err);
+      setWarning('ANALYSIS FAILED. PLEASE TRY AGAIN.');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
