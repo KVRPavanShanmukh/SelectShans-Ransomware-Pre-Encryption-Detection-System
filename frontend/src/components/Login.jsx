@@ -10,7 +10,20 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
   const [psk, setPsk] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const errorTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [resendCooldown]);
 
   useEffect(() => {
     // Auto-fade error after 4 seconds
@@ -49,6 +62,7 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
         if (data.otp) setOtp(data.otp);
         if (data.psk) setPsk(data.psk);
         setStep(1);
+        setResendCooldown(30);
       } else {
         setError(data.error || 'Invalid credentials');
       }
@@ -166,8 +180,11 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
         {step === 1 && (
           <form onSubmit={submitVerification}>
-            <p style={{ marginBottom: 15 }}>
+            <p style={{ marginBottom: 5 }}>
               Enter the OTP and PSK sent to your email.
+            </p>
+            <p style={{ marginBottom: 15, fontSize: '13px', color: '#00ffcc', fontWeight: 'bold' }}>
+              Keep your mail ready for the OTP (Expires in 3 mins).
             </p>
 
             <div className="input-group">
@@ -216,6 +233,16 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
 
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Verifying...' : 'Complete Login'}
+            </button>
+            
+            <button 
+              type="button" 
+              className="login-btn" 
+              style={{ marginTop: 10, background: resendCooldown > 0 ? '#333' : '#007CC3' }} 
+              disabled={resendCooldown > 0 || loading}
+              onClick={(e) => submitCredentials(e)}
+            >
+              {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
             </button>
           </form>
         )}

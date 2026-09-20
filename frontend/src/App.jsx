@@ -14,9 +14,22 @@ import SOAR from './components/SOAR';
 import BetaLogin from './components/BetaLogin';
 import BetaTerminal from './components/BetaTerminal';
 import SessionManager from './components/SessionManager';
+import LearningHub from './components/LearningHub';
+import TechDetail from './components/TechDetail';
+import DraggableLearnButton from './components/DraggableLearnButton';
 import './App.css';
 
 function App() {
+  // Handle direct routing for Learning Hub pages
+  const pathname = window.location.pathname;
+  if (pathname === '/learning-hub') {
+    return <LearningHub />;
+  }
+  if (pathname.startsWith('/learning-hub/')) {
+    const techId = pathname.split('/')[2];
+    return <TechDetail techId={techId} />;
+  }
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [adminTab, setAdminTab] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -192,6 +205,8 @@ function App() {
           {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
         </div>
       </main>
+
+      <DraggableLearnButton />
     </div>
   );
 }
