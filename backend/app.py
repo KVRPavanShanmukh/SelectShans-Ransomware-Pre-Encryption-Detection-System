@@ -190,7 +190,7 @@ DETECTOR_PACKAGE_DIR = Path(__file__).resolve().parent / "detector_package"
 DETECTOR_SECRET = os.getenv("DETECTOR_SECRET", "prd-secret")
 
 _pending_logins = {}
-OTP_EXPIRY = 10
+OTP_EXPIRY = 3
 
 
 # =====================================================
@@ -219,13 +219,18 @@ def verify_detector_token(token):
 # Memory store for active detectors (user_id -> last_ping_datetime)
 _active_detectors = {}
 
-def send_email_safe(to_email, subject, body, attachment_path=None):
+def send_email_safe(to_email, subject, body, attachment_path=None, html_body=None):
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart('mixed')
         msg['From'] = os.getenv("MAIL_USER", "no-reply@selectshans.local")
         msg['To'] = to_email
         msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
+        
+        alt_part = MIMEMultipart('alternative')
+        alt_part.attach(MIMEText(body, 'plain'))
+        if html_body:
+            alt_part.attach(MIMEText(html_body, 'html'))
+        msg.attach(alt_part)
         
         if attachment_path and os.path.exists(attachment_path):
             with open(attachment_path, "rb") as attachment:
@@ -253,7 +258,12 @@ def send_email_safe(to_email, subject, body, attachment_path=None):
         server.quit()
         return True
     except Exception as e:
-        print("SMTP execution failed:", e)
+        print(f"SMTP execution failed: {e}")
+        print("\n=== SIMULATED EMAIL FALLBACK ===")
+        print(f"To: {to_email}")
+        print(f"Subject: {subject}")
+        print(f"Body:\n{body}")
+        print("================================\n")
         return False
 
 # =====================================================
@@ -267,6 +277,13 @@ def signup():
     if not all([data.get("username"), data.get("email"),
                 data.get("password"), data.get("sec_q"), data.get("sec_a")]):
         return jsonify({"error": "All fields required"}), 400
+
+    import re
+    password = data.get("password")
+    if not re.search(r'[A-Z]', password):
+        return jsonify({"error": "Password must contain at least one uppercase letter."}), 400
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return jsonify({"error": "Password must contain at least one special character."}), 400
 
     conn = pool.get_connection()
     try:
@@ -337,10 +354,96 @@ def login():
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY)
     }
 
+    print(f"\n[DEBUG] Login Attempt for {email}")
+    print(f"[DEBUG] OTP: {otp} | PSK: {psk}\n")
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        .email-container {{
+            background-color: #050a0e;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 40px;
+            text-align: center;
+            border: 2px solid #00ffcc;
+            border-radius: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }}
+        .header {{
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid #00ffcc;
+            padding-bottom: 10px;
+        }}
+        .secret-box {{
+            background-color: #0a1922;
+            border: 1px dashed #00ffcc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }}
+        .secret-box:hover {{
+            background-color: #00ffcc;
+            color: #050a0e;
+            box-shadow: 0 0 15px #00ffcc;
+            transform: scale(1.05);
+            cursor: crosshair;
+        }}
+        .label {{
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }}
+        .value {{
+            font-size: 36px;
+            font-weight: bold;
+            letter-spacing: 5px;
+        }}
+        .footer {{
+            font-size: 12px;
+            color: #888;
+            margin-top: 30px;
+        }}
+    </style>
+    </head>
+    <body>
+        <div class="email-container">
+            <div class="header">SelectShans Security Protocol</div>
+            <p>Authentication request detected for {email}.</p>
+            <p>Use the following credentials to access the system.</p>
+            
+            <div class="secret-box">
+                <div class="label">ONE-TIME PASSWORD (OTP)</div>
+                <div class="value">{otp}</div>
+            </div>
+            
+            <div class="secret-box">
+                <div class="label">PRE-SHARED KEY (PSK)</div>
+                <div class="value">{psk}</div>
+            </div>
+            
+            <div class="footer">
+                Warning: These credentials will self-destruct in {OTP_EXPIRY} minutes.<br>
+                Do not share these keys with anyone.
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
     send_email_safe(
         email,
         "SelectShans Login",
-        f"OTP: {otp}\nPSK: {psk}\nValid for {OTP_EXPIRY} minutes."
+        f"OTP: {otp}\nPSK: {psk}\nValid for {OTP_EXPIRY} minutes.",
+        html_body=html_body
     )
 
     return jsonify({"pending": True, "identifier": email}), 200
