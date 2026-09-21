@@ -325,22 +325,27 @@ def login():
             "SELECT id, username, email, password_hash, dob FROM users WHERE username=%s OR email=%s",
             (data.get("username"), data.get("username"))
         )
-        user = cursor.fetchone()
+        users = cursor.fetchall()
     finally:
         try: cursor.close()
         except: pass
         conn.close()
 
-    is_valid = False
-    if user and user.get("password_hash"):
-        try:
-            is_valid = check_password_hash(user["password_hash"], data.get("password"))
-        except ValueError:
-            is_valid = False
+    valid_user = None
+    if users:
+        for u in users:
+            if u.get("password_hash"):
+                try:
+                    if check_password_hash(u["password_hash"], data.get("password")):
+                        valid_user = u
+                        break
+                except ValueError:
+                    pass
 
-    if not user or not is_valid:
+    if not valid_user:
         return jsonify({"error": "Invalid credentials"}), 401
 
+    user = valid_user
     email = user["email"]
     otp = ''.join(secrets.choice("0123456789") for _ in range(6))
     psk = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
