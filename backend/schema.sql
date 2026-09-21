@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS users (
     sec_q VARCHAR(255),
     sec_a_hash VARCHAR(255),
     role ENUM('admin', 'user') DEFAULT 'user',
+    shikikan_access BOOLEAN DEFAULT FALSE,
+    shikikan_requested BOOLEAN DEFAULT FALSE,
+    is_online BOOLEAN DEFAULT FALSE,
+    last_active DATETIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -122,6 +126,21 @@ CREATE TABLE IF NOT EXISTS detector_logs (
     event_type VARCHAR(100) NOT NULL,
     directory VARCHAR(500),
     event_count INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Detector Activities Table
+CREATE TABLE IF NOT EXISTS detector_activities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    event_type VARCHAR(100) NOT NULL,
+    details TEXT,
+    action_taken VARCHAR(255),
+    process_name VARCHAR(100),
+    score INT DEFAULT 0,
+    detector_id VARCHAR(50),
+    hostname VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

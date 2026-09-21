@@ -58,6 +58,76 @@ def register_admin_routes(app, pool):
             conn.close()
     
     
+    @app.route('/api/admin/users', methods=['GET'])
+    @token_required
+    def get_users():
+        user_id = g.user['user_id']
+        
+        # Verify if admin
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or user.get('role') != 'admin':
+                return jsonify({"error": "Admin access required"}), 403
+                
+            cursor.execute("""
+                SELECT id, username, email, dob, role, shikikan_access, shikikan_requested, is_online, last_active, created_at 
+                FROM users 
+                ORDER BY created_at DESC
+            """)
+            users = cursor.fetchall()
+            
+            # Format datetime
+            for u in users:
+                if u.get('last_active'):
+                    u['last_active'] = u['last_active'].isoformat()
+                if u.get('created_at'):
+                    u['created_at'] = u['created_at'].isoformat()
+                    
+            return jsonify(users), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+
+    @app.route('/api/admin/users/<int:target_id>/permissions', methods=['POST'])
+    @token_required
+    def update_user_permissions(target_id):
+        user_id = g.user['user_id']
+        data = request.json
+        
+        # Verify if admin
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or user.get('role') != 'admin':
+                return jsonify({"error": "Admin access required"}), 403
+                
+            shikikan_access = data.get('shikikan_access')
+            
+            cursor.execute("""
+                UPDATE users SET shikikan_access = %s, shikikan_requested = FALSE 
+                WHERE id = %s
+            """, (shikikan_access, target_id))
+            
+            # Log audit event
+            action_desc = f"{'Granted' if shikikan_access else 'Revoked'} Shiki-kan access for User #{target_id}"
+            cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)",
+                         (user_id, 'PERMISSION_UPDATED', action_desc))
+            
+            conn.commit()
+            return jsonify({"status": "success"}), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+
     @app.route('/api/admin/clear-data', methods=['POST'])
     @token_required
     def clear_all_data():

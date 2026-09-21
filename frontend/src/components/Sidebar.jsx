@@ -1,7 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, UploadCloud, ShieldCheck, Settings, LogOut, Database, Lock, Zap, Terminal, Mail } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
+const Sidebar = ({ activeTab, setActiveTab, onLogout, onRequestShikikan }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Threat Dashboard', icon: <LayoutDashboard size={18} /> },
     { id: 'upload', label: 'Analysis Lab', icon: <UploadCloud size={18} /> },
@@ -54,6 +54,15 @@ const Sidebar = ({ activeTab, setActiveTab, onLogout }) => {
         >
           <Terminal size={18} color="#ff4d4d" />
           <span style={{ color: '#ff4d4d' }}>GHOST - Shiki-kan</span>
+        </div>
+        
+        <div
+          className="nav-item"
+          onClick={onRequestShikikan}
+          style={{ borderLeft: '3px solid transparent', paddingLeft: 35, marginTop: -5, marginBottom: 10 }}
+        >
+          <Mail size={14} color="#f59e0b" />
+          <span style={{ color: '#f59e0b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Request Access</span>
         </div>
         
         <div

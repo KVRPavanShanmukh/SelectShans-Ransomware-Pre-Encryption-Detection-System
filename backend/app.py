@@ -140,23 +140,22 @@ def init_db(pool):
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT,
                 event_type VARCHAR(100) NOT NULL,
-                directory VARCHAR(500),
-                target_file VARCHAR(500),
-                severity VARCHAR(20) DEFAULT 'MEDIUM',
+                details TEXT,
+                action_taken VARCHAR(255),
+                process_name VARCHAR(100),
                 score INT DEFAULT 0,
                 detector_id VARCHAR(50),
                 hostname VARCHAR(100),
-                event_count INT DEFAULT 1,
-                action_taken VARCHAR(255),
-                process_name VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS score INT DEFAULT 0;")
-        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS detector_id VARCHAR(50);")
-        statements.append("ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS hostname VARCHAR(100);")
+
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('admin', 'user') DEFAULT 'user';")
         statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR(20) DEFAULT '300706';")
+        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_access BOOLEAN DEFAULT FALSE;")
+        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_requested BOOLEAN DEFAULT FALSE;")
+        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;")
+        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active DATETIME;")
         statements.append("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500);")
         statements.append("UPDATE users SET role = 'admin' WHERE username = 'admin';")
         
@@ -482,6 +481,69 @@ def verify():
         "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
 
+@app.route('/api/admin/fixed-login', methods=['POST'])
+def admin_fixed_login():
+    data = request.json or {}
+    username = data.get("username")
+    password = data.get("password")
+    
+    # FIXED ADMIN CREDENTIALS
+    if username == "admin_super" and password == "admin_secret_123":
+        # Fetch the admin user id from db
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT id, username, email FROM users WHERE role = 'admin' LIMIT 1")
+            admin_user = cursor.fetchone()
+        finally:
+            cursor.close()
+            conn.close()
+            
+        if admin_user:
+            jwt_token = create_token(admin_user["id"], admin_user["username"], admin_user["email"])
+            return jsonify({
+                "message": "Admin login successful",
+                "token": jwt_token,
+                "user_id": admin_user["id"],
+                "role": "admin"
+            }), 200
+        else:
+            return jsonify({"error": "Admin account not found in database"}), 500
+            
+    return jsonify({"error": "Invalid admin credentials"}), 401
+
+@app.route('/api/user/ping', methods=['POST'])
+@token_required
+def user_ping():
+    user_id = g.user['user_id']
+    conn = pool.get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET is_online = TRUE, last_active = NOW() WHERE id = %s", (user_id,))
+        conn.commit()
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/api/users/request-shikikan', methods=['POST'])
+@token_required
+def request_shikikan():
+    user_id = g.user['user_id']
+    conn = pool.get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET shikikan_requested = TRUE WHERE id = %s", (user_id,))
+        conn.commit()
+        return jsonify({"status": "Requested access to Shiki-kan successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.route('/api/send-email', methods=['POST'])
 @token_required
 def api_send_email():
@@ -524,7 +586,7 @@ def beta_login():
     conn = pool.get_connection()
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT dob FROM users WHERE id=%s", (current_user["user_id"],))
+        cursor.execute("SELECT dob, shikikan_access FROM users WHERE id=%s", (current_user["user_id"],))
         user = cursor.fetchone()
     finally:
         try: cursor.close()
@@ -533,6 +595,9 @@ def beta_login():
 
     if not user:
         return jsonify({"error": "User not found"}), 404
+        
+    if not user.get("shikikan_access"):
+        return jsonify({"error": "Access Denied by Admin. Please request permission."}), 403
         
     int_otp = ''.join(secrets.choice("0123456789") for _ in range(4))
     str_otp = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3))
@@ -551,7 +616,7 @@ def beta_login():
     send_email_safe(
         email,
         "SelectShans Beta Terminal Access",
-        f"Your Beta Terminal Access Code is: {expected_full_code}\nValid for 5 minutes."
+        f"OTP: {int_otp}\nPSK: {str_otp}\nValid for 5 minutes."
     )
 
     return jsonify({"message": "Beta OTP generated and sent to email"}), 200

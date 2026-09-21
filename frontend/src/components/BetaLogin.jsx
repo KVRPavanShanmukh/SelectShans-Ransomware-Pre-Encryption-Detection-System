@@ -7,6 +7,8 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState(false);
   const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -40,8 +42,32 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
       if (response.ok) {
         if (data.code) setCode(data.code);
         setStep(1);
+        setAccessDenied(false);
+        setRequestSuccess(false);
       } else {
+        if (response.status === 403 && data.error.includes("Access Denied")) {
+          setAccessDenied(true);
+        }
         setError(data.error || 'Failed to request GHOST access');
+      }
+    } catch {
+      setError('Server connection failed');
+    }
+    setLoading(false);
+  };
+
+  const handleRequestAccess = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/users/request-shikikan', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (response.ok) {
+        setRequestSuccess(true);
+        setAccessDenied(false);
+      } else {
+        setError('Failed to send request');
       }
     } catch {
       setError('Server connection failed');
@@ -122,6 +148,24 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
             }}>
               ABORT
             </button>
+            
+            {accessDenied && (
+              <div style={{ marginTop: 20 }}>
+                <p style={{ color: '#ff4d4d', fontSize: '0.85rem' }}>&gt; ACCESS DENIED BY ADMIN</p>
+                <button type="button" onClick={handleRequestAccess} className="login-btn" style={{ 
+                  background: '#ff4d4d', color: '#fff', border: 'none', borderRadius: 0, marginTop: 5,
+                  boxShadow: '0 0 10px #ff4d4d', fontWeight: 'bold'
+                }} disabled={loading}>
+                  {loading ? 'REQUESTING...' : 'REQUEST ACCESS'}
+                </button>
+              </div>
+            )}
+            
+            {requestSuccess && (
+              <p style={{ color: '#00ff41', fontSize: '0.85rem', marginTop: 15 }}>
+                &gt; ACCESS REQUEST SENT TO ADMIN. AWAITING APPROVAL.
+              </p>
+            )}
           </form>
         )}
 
