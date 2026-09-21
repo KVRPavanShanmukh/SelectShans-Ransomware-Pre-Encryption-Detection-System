@@ -1,12 +1,26 @@
 import mysql.connector
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+db_host = os.getenv("DB_HOST", "localhost")
+db_port = int(os.getenv("DB_PORT", 3306))
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_name = os.getenv("DB_NAME")
+
+if not db_user or not db_password or not db_name:
+    print("Error: DB_USER, DB_PASSWORD, and DB_NAME environment variables are required.")
+    exit(1)
 
 try:
     connection = mysql.connector.connect(
-        host="localhost",
-        port=3306,
-        user="root",
-        password="passwors",
-        database="dbname"
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_password,
+        database=db_name
     )
     cursor = connection.cursor()
 

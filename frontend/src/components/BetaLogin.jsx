@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState, useRef, useEffect } from 'react';
 import { Lock, ShieldCheck, Mail, Key } from 'lucide-react';
 
@@ -30,7 +31,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/beta/login', {
+      const response = await fetch(`${API_URL}/api/beta/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -59,7 +60,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
   const handleRequestAccess = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/users/request-shikikan', {
+      const response = await fetch(`${API_URL}/api/users/request-shikikan`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${jwtToken}` }
       });
@@ -80,7 +81,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/beta/verify', {
+      const response = await fetch(`${API_URL}/api/beta/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

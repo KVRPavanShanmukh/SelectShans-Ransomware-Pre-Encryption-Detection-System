@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState, useRef, useEffect } from 'react';
 import { Lock, User, Mail, Key, ShieldCheck } from 'lucide-react';
 
@@ -49,7 +50,7 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(creds)
@@ -81,7 +82,7 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/login/verify', {
+      const response = await fetch(`${API_URL}/api/login/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

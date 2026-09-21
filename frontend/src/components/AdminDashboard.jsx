@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState, useEffect } from 'react';
 import { Users, Shield, Clock, Search, ShieldAlert, CheckCircle, XCircle } from 'lucide-react';
 
@@ -15,7 +16,7 @@ const AdminDashboard = ({ jwtToken }) => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/admin/users', {
+      const response = await fetch(`${API_URL}/api/admin/users`, {
         headers: { 'Authorization': `Bearer ${jwtToken}` }
       });
       if (response.ok) {
@@ -33,7 +34,7 @@ const AdminDashboard = ({ jwtToken }) => {
 
   const toggleShikikanAccess = async (userId, currentAccess) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/admin/users/${userId}/permissions`, {
+      const response = await fetch(`${API_URL}/api/admin/users/${userId}/permissions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${jwtToken}`,
