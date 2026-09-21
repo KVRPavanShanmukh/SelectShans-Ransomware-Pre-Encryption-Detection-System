@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState } from 'react';
 import { User, Mail, Lock, ShieldCheck } from 'lucide-react';
 
@@ -27,7 +28,7 @@ const Signup = ({ onSignupSuccess, onSwitchToLogin }) => {
 
         try {
             // Pointing to the new Flask backend port 5000
-            const response = await fetch('http://127.0.0.1:5000/api/signup', {
+            const response = await fetch(`${API_URL}/api/signup`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

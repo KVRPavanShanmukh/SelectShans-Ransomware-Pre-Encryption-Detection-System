@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal as TerminalIcon, X } from 'lucide-react';
 
@@ -26,7 +27,7 @@ const BetaTerminal = ({ jwtToken, betaToken, onClose }) => {
     setIsProcessing(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/beta/terminal', {
+      const response = await fetch(`${API_URL}/api/beta/terminal`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

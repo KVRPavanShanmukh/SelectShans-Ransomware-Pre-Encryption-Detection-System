@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState } from 'react';
 import { Mail, Send, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -20,7 +21,7 @@ const Mailer = ({ userId }) => {
     setMessage('');
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/send-email', {
+      const response = await fetch(`${API_URL}/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

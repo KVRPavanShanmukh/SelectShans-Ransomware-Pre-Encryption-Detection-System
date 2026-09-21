@@ -1,3 +1,4 @@
+import { API_URL } from './config';
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -50,7 +51,7 @@ function App() {
     if (isAuthenticated && jwtToken && !isAdmin) {
       const ping = async () => {
         try {
-          await fetch('http://127.0.0.1:5000/api/user/ping', {
+          await fetch(`${API_URL}/api/user/ping`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${jwtToken}` }
           });
@@ -83,7 +84,7 @@ function App() {
   const startTokenRefreshTimer = (token) => {
     const refreshInterval = setInterval(async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/token/refresh', {
+        const response = await fetch(`${API_URL}/api/token/refresh`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -136,7 +137,7 @@ function App() {
   
   const handleRequestShikikan = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/users/request-shikikan', {
+      const response = await fetch(`${API_URL}/api/users/request-shikikan`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${jwtToken}` }
       });
@@ -257,7 +258,7 @@ function App() {
           {!adminTab && activeTab === 'protection' && <ActiveShield />}
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
           {!adminTab && activeTab === 'soar' && <SOAR userId={userId} />}
-          {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase="http://127.0.0.1:5000" onNavigate={handleAdminNavigation} /> }
+          {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} /> }
           
           {!adminTab && activeTab === 'beta' && !betaToken && (
             <BetaLogin 
@@ -274,8 +275,8 @@ function App() {
             />
           )}
           
-          {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
-          {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase="http://127.0.0.1:5000" onBack={() => setAdminTab(null)} />}
+          {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
+          {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
         </div>
       </main>
 

@@ -21,6 +21,14 @@ from email import encoders
 
 from dotenv import load_dotenv
 load_dotenv()
+
+APP_ENV = os.getenv("APP_ENV", "production")
+
+REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
+for var in REQUIRED_ENV_VARS:
+    if not os.getenv(var):
+        raise RuntimeError(f"{var} environment variable is required")
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, request, jsonify, send_file, after_this_request, g
@@ -48,7 +56,8 @@ import matplotlib.pyplot as plt
 # =====================================================
 
 app = Flask(__name__)
-CORS(app)
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5174")
+CORS(app, resources={r"/*": {"origins": frontend_url}})
 
 print("Starting SelectShans Backend...")
 
@@ -57,17 +66,19 @@ def handle_exception(e):
     import traceback
     return str(traceback.format_exc()), 500
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
 # =====================================================
 # DATABASE CONFIG & AUTO-CREATION
 # =====================================================
 
-db_pass = os.getenv("DB_PASSWORD")
-if not db_pass or db_pass == "your_db_password":
-    db_pass = "shanmukh@2006"
+is_vercel = os.getenv("VERCEL") == "1"
 
-db_name = os.getenv("DB_NAME")
-if not db_name or db_name == "your_db_name":
-    db_name = "RANSOMWARE"
+db_pass = os.getenv("DB_PASSWORD")
+
+db_name = os.getenv("DB_NAME", "RANSOMWARE")
 
 dbconf = {
     "host": os.getenv("DB_HOST", "localhost"),
@@ -77,25 +88,26 @@ dbconf = {
 }
 
 # Auto-create database if it doesn't exist
-try:
-    print("Pre-connecting to MySQL to verify/create database...")
-    import mysql.connector
-    temp_conn = mysql.connector.connect(**dbconf)
-    temp_cursor = temp_conn.cursor()
-    temp_cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-    temp_conn.commit()
-    temp_cursor.close()
-    temp_conn.close()
-    print(f"Database '{db_name}' verified/created.")
-except Exception as db_init_err:
-    print("Failed to auto-create database:", db_init_err)
+if not is_vercel:
+    try:
+        print("Pre-connecting to MySQL to verify/create database...")
+        import mysql.connector
+        temp_conn = mysql.connector.connect(**dbconf)
+        temp_cursor = temp_conn.cursor()
+        temp_cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+        temp_conn.commit()
+        temp_cursor.close()
+        temp_conn.close()
+        print(f"Database '{db_name}' verified/created.")
+    except Exception as db_init_err:
+        print("Failed to auto-create database:", db_init_err)
 
 # Add database name to configuration for the pool
 dbconf["database"] = db_name
 
 pool = pooling.MySQLConnectionPool(
     pool_name="mypool",
-    pool_size=5,
+    pool_size=1 if is_vercel else 5,
     **dbconf
 )
 
@@ -175,7 +187,8 @@ def init_db(pool):
         print("Failed to initialize database schema:", e)
 
 # Run schema initialization
-init_db(pool)
+if not is_vercel:
+    init_db(pool)
 
 # Register admin routes
 register_admin_routes(app, pool)
@@ -186,7 +199,7 @@ register_admin_routes(app, pool)
 # =====================================================
 
 DETECTOR_PACKAGE_DIR = Path(__file__).resolve().parent / "detector_package"
-DETECTOR_SECRET = os.getenv("DETECTOR_SECRET", "prd-secret")
+DETECTOR_SECRET = os.getenv("DETECTOR_SECRET")
 
 _pending_logins = {}
 OTP_EXPIRY = 3
@@ -244,10 +257,13 @@ def send_email_safe(to_email, subject, body, attachment_path=None, html_body=Non
         smtp_user = os.getenv("MAIL_USER")
         smtp_pass = os.getenv("MAIL_PASS")
         
-        # Don't try to connect if no real SMTP server is configured and we're not running a local one
-        if smtp_server == "localhost" and not smtp_user:
+        # Simulated email fallback only in development
+        if APP_ENV == "development" and not smtp_pass:
             print("Simulated Email Sent (No SMTP configured):", to_email, subject)
             return True
+        elif not smtp_pass:
+            print("Error: SMTP credentials missing in production environment")
+            return False
             
         server = smtplib.SMTP(smtp_server, smtp_port)
         if smtp_user and smtp_pass:
@@ -443,12 +459,14 @@ def login():
     </html>
     """
 
-    send_email_safe(
+    success = send_email_safe(
         email,
         "SelectShans Login",
         f"OTP: {otp}\nPSK: {psk}\nValid for {OTP_EXPIRY} minutes.",
         html_body=html_body
     )
+    if not success:
+        return jsonify({"error": "Failed to send OTP email. Please verify SMTP configuration."}), 500
 
     return jsonify({"pending": True, "identifier": email}), 200
 
@@ -481,36 +499,7 @@ def verify():
         "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
 
-@app.route('/api/admin/fixed-login', methods=['POST'])
-def admin_fixed_login():
-    data = request.json or {}
-    username = data.get("username")
-    password = data.get("password")
-    
-    # FIXED ADMIN CREDENTIALS
-    if username == "admin_super" and password == "admin_secret_123":
-        # Fetch the admin user id from db
-        conn = pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("SELECT id, username, email FROM users WHERE role = 'admin' LIMIT 1")
-            admin_user = cursor.fetchone()
-        finally:
-            cursor.close()
-            conn.close()
-            
-        if admin_user:
-            jwt_token = create_token(admin_user["id"], admin_user["username"], admin_user["email"])
-            return jsonify({
-                "message": "Admin login successful",
-                "token": jwt_token,
-                "user_id": admin_user["id"],
-                "role": "admin"
-            }), 200
-        else:
-            return jsonify({"error": "Admin account not found in database"}), 500
-            
-    return jsonify({"error": "Invalid admin credentials"}), 401
+
 
 @app.route('/api/user/ping', methods=['POST'])
 @token_required
@@ -613,11 +602,13 @@ def beta_login():
         expected_full_code += int_otp[i] + str_otp[i]
     expected_full_code += int_otp[3]
 
-    send_email_safe(
+    success = send_email_safe(
         email,
         "SelectShans Beta Terminal Access",
         f"OTP: {int_otp}\nPSK: {str_otp}\nValid for 5 minutes."
     )
+    if not success:
+        return jsonify({"error": "Failed to send Beta OTP email"}), 500
 
     return jsonify({"message": "Beta OTP generated and sent to email"}), 200
 
@@ -655,7 +646,7 @@ def beta_verify():
     # Generate a special beta token
     beta_token = jwt.encode(
         {"user_id": current_user["user_id"], "beta_access": True, "exp": datetime.now(timezone.utc) + timedelta(hours=2)},
-        os.getenv("JWT_SECRET", "default_secret_please_change"),
+        os.getenv("JWT_SECRET"),
         algorithm="HS256"
     )
     
@@ -676,7 +667,7 @@ def beta_terminal():
     try:
         decoded = jwt.decode(
             beta_token, 
-            os.getenv("JWT_SECRET", "default_secret_please_change"), 
+            os.getenv("JWT_SECRET"), 
             algorithms=["HS256"]
         )
         if not decoded.get("beta_access"):
@@ -723,8 +714,9 @@ def detector_download():
     buffer = io.BytesIO()
 
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        backend_url = os.getenv("BACKEND_API_URL", request.url_root.rstrip("/"))
         zf.writestr("config.json", json.dumps({
-            "api_base": request.url_root.rstrip("/"),
+            "api_base": backend_url,
             "token": token,
             "email": info["email"]
         }, indent=2))
@@ -788,7 +780,7 @@ def detector_log():
 
         print("Triggering email to:", user_email)
 
-        send_email_safe(
+        success = send_email_safe(
             user_email,
             "⚠ SelectShans ALERT: Mass File Rename Detected",
             f"""
@@ -808,6 +800,8 @@ Stay Secure,
 SelectShans Engine
 """
         )
+        if not success:
+            return jsonify({"status": "event stored", "email_alert": "failed"}), 207
 
     return jsonify({"status": "event stored"}), 200
 
@@ -1141,11 +1135,11 @@ def generate_pdf_report(user_id, user_email):
     plt.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
-    chart_path = f"chart_{user_id}_{secrets.token_hex(4)}.png"
+    chart_path = f"/tmp/chart_{user_id}_{secrets.token_hex(4)}.png"
     plt.savefig(chart_path)
     plt.close()
 
-    pdf_path = f"SelectShans_Security_Report_{user_id}.pdf"
+    pdf_path = f"/tmp/SelectShans_Security_Report_{user_id}.pdf"
     doc = SimpleDocTemplate(
         pdf_path,
         pagesize=A4,
@@ -1470,76 +1464,7 @@ def refresh_jwt_token():
 # GOOGLE OAUTH ENDPOINTS
 # =====================================================
 
-@app.route('/api/auth/google', methods=['POST'])
-def google_auth():
-    """Google OAuth authentication endpoint"""
-    data = request.json
-    google_token = data.get('token')
-    
-    if not google_token:
-        return jsonify({"error": "Token required"}), 400
-    
-    try:
-        from google_auth import verify_google_token
-        idinfo = verify_google_token(google_token)
-        if not idinfo:
-            return jsonify({"error": "Authentication failed"}), 401
-        
-        google_id = idinfo['user_id']
-        email = idinfo['email']
-        name = idinfo.get('name', '')
-        picture = idinfo.get('picture', '')
-        
-        conn = pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Check if user exists
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cursor.fetchone()
-        
-        if not user:
-            # Create new user from Google info
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                email.split('@')[0] + '_' + google_id[:8],  # username
-                generate_password_hash(secrets.token_hex(16)),  # random password
-                email,
-                'Google OAuth User',
-                generate_password_hash('oauth')
-            ))
-            conn.commit()
-            cursor.execute("SELECT id, username, email FROM users WHERE email = %s", (email,))
-            user = cursor.fetchone()
-        
-        # Create JWT token
-        jwt_token = create_token(user['id'], user['username'], user['email'])
-        detector_token = create_detector_token(user['id'], user['email'])
-        
-        # Log the action
-        cursor.execute("""
-            INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)
-        """, (user['id'], 'GOOGLE_OAUTH_LOGIN', f'Google OAuth login: {email}'))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "message": "Google authentication successful",
-            "token": jwt_token,
-            "detector_token": detector_token,
-            "user_id": user['id'],
-            "username": user['username'],
-            "email": user['email'],
-            "name": name,
-            "picture": picture,
-            "expires_in": 30 * 60  # 30 minutes in seconds
-        }), 200
-        
-    except Exception as e:
-        print(f"Google OAuth error: {e}")
-        return jsonify({"error": f"Authentication failed: {str(e)}"}), 401
+
 
 
 
@@ -1580,9 +1505,22 @@ def resolve_alert(alert_id):
 
 
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(send_daily_summary, 'cron', hour=9)
-scheduler.start()
+@app.route('/api/cron/daily-summary', methods=['GET', 'POST'])
+def run_daily_summary():
+    """Endpoint for Vercel Cron to trigger daily summary."""
+    auth_header = request.headers.get("Authorization")
+    cron_secret = os.getenv("CRON_SECRET")
+    
+    if not cron_secret:
+        return jsonify({"error": "Cron secret not configured"}), 500
+        
+    expected_header = f"Bearer {cron_secret}"
+    
+    if not auth_header or not hmac.compare_digest(auth_header, expected_header):
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    send_daily_summary()
+    return jsonify({"status": "daily summary job completed"}), 200
 
 
 
@@ -1591,4 +1529,4 @@ scheduler.start()
 # =====================================================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)

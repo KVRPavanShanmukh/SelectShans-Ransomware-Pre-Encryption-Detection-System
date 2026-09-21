@@ -1,3 +1,4 @@
+import { API_URL } from '../config';
 import React, { useState } from 'react';
 import { Lock, User, ShieldCheck } from 'lucide-react';
 
@@ -8,31 +9,7 @@ const AdminLogin = ({ onAdminLogin, onCancel }) => {
 
   const submitCredentials = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const response = await fetch('http://127.0.0.1:5000/api/admin/fixed-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds)
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem("jwtToken", data.token);
-        localStorage.setItem("userId", data.user_id);
-        localStorage.setItem("user_role", data.role);
-        onAdminLogin(data.user_id, data.token);
-      } else {
-        setError(data.error || 'Invalid admin credentials');
-      }
-    } catch {
-      setError('Server connection failed');
-    }
-
-    setLoading(false);
+    setError('Admin login is now handled via the main login page using OTP. Please go back and use the main login.');
   };
 
   return (

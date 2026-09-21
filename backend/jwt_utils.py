@@ -8,19 +8,32 @@ from functools import wraps
 from flask import request, jsonify, g
 
 def get_jwt_secret():
-    return os.getenv('JWT_SECRET', 'sentinelstream_super_secret_jwt_key_2024')
+    secret = os.getenv('JWT_SECRET')
+    if not secret:
+        raise RuntimeError("JWT_SECRET environment variable is required")
+    return secret
 
 JWT_ALGORITHM = 'HS256'
-TOKEN_EXPIRY_MINUTES = 30
+
+def get_token_expiry_timedelta():
+    expires_in = os.getenv("JWT_EXPIRES_IN", "30m")
+    if expires_in.endswith('d'):
+        return timedelta(days=int(expires_in[:-1]))
+    elif expires_in.endswith('h'):
+        return timedelta(hours=int(expires_in[:-1]))
+    elif expires_in.endswith('m'):
+        return timedelta(minutes=int(expires_in[:-1]))
+    else:
+        return timedelta(minutes=int(expires_in)) # Default to minutes if no suffix
 
 def create_token(user_id, username, email):
-    """Create JWT token with 30-minute expiry"""
+    """Create JWT token with configurable expiry"""
     payload = {
         'user_id': user_id,
         'username': username,
         'email': email,
         'iat': datetime.now(timezone.utc),
-        'exp': datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
+        'exp': datetime.now(timezone.utc) + get_token_expiry_timedelta()
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
