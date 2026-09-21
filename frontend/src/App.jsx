@@ -9,6 +9,8 @@ import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
 import AuditLog from './components/AuditLog';
 import Login from './components/Login';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
 import Signup from './components/Signup';
 import SOAR from './components/SOAR';
 import BetaLogin from './components/BetaLogin';
@@ -33,7 +35,9 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [adminTab, setAdminTab] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [logsUploaded, setLogsUploaded] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [userId, setUserId] = useState(null);
@@ -41,15 +45,36 @@ function App() {
   const [betaToken, setBetaToken] = useState(null);
   const [tokenRefreshInterval, setTokenRefreshInterval] = useState(null);
 
+  // Ping backend to track online status
+  useEffect(() => {
+    if (isAuthenticated && jwtToken && !isAdmin) {
+      const ping = async () => {
+        try {
+          await fetch('http://127.0.0.1:5000/api/user/ping', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${jwtToken}` }
+          });
+        } catch (e) {}
+      };
+      ping(); // initial
+      const interval = setInterval(ping, 60000); // every minute
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, jwtToken, isAdmin]);
+
   // Check for persisted session on app load
   useEffect(() => {
     const storedToken = localStorage.getItem('jwtToken');
     const storedUserId = localStorage.getItem('userId');
+    const storedRole = localStorage.getItem('user_role');
     
     if (storedToken && storedUserId) {
       setJwtToken(storedToken);
       setUserId(parseInt(storedUserId));
       setIsAuthenticated(true);
+      if (storedRole === 'admin') {
+        setIsAdmin(true);
+      }
       startTokenRefreshTimer(storedToken);
     }
   }, []);
@@ -89,36 +114,84 @@ function App() {
     setUserId(userId);
     setJwtToken(token);
     setIsAuthenticated(true);
+    if (localStorage.getItem('user_role') === 'admin') {
+      setIsAdmin(true);
+    }
     startTokenRefreshTimer(token);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('userId');
+    localStorage.removeItem('user_role');
     setJwtToken(null);
     setBetaToken(null);
     setUserId(null);
     setIsAuthenticated(false);
+    setIsAdmin(false);
     if (tokenRefreshInterval) {
       clearInterval(tokenRefreshInterval);
     }
   };
   
+  const handleRequestShikikan = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/users/request-shikikan', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (response.ok) {
+        alert("Shiki-kan access requested successfully. Please wait for admin approval.");
+      } else {
+        alert("Failed to request access.");
+      }
+    } catch {
+      alert("Error requesting access.");
+    }
+  };
+
   const handleAdminNavigation = (adminPage) => {
     setAdminTab(adminPage);
   };
 
-  if (!isAuthenticated && !isSignup) {
-    return <Login onLogin={handleLogin} onSwitchToSignup={() => setIsSignup(true)} />;
+  if (!isAuthenticated && !isSignup && !showAdminLogin) {
+    return <Login onLogin={handleLogin} onSwitchToSignup={() => setIsSignup(true)} onSwitchToAdmin={() => setShowAdminLogin(true)} />;
+  }
+
+  if (!isAuthenticated && showAdminLogin) {
+    return <AdminLogin onAdminLogin={handleLogin} onCancel={() => setShowAdminLogin(false)} />;
   }
 
   if (!isAuthenticated && isSignup) {
     return <Signup onSignupSuccess={() => setIsSignup(false)} onSwitchToLogin={() => setIsSignup(false)} />;
   }
 
+  if (isAdmin) {
+    return (
+      <div className="app-container">
+        <main className="content-area" style={{ marginLeft: 0 }}>
+          <header className="top-nav">
+            <div className="search-bar">
+              <h2>SelectShans SOC Admin Control</h2>
+            </div>
+            <button 
+              onClick={handleLogout}
+              style={{ background: '#ff4d4d', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Sign Out Admin
+            </button>
+          </header>
+          <div className="main-view">
+            <AdminDashboard jwtToken={jwtToken} />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-container ${betaToken ? 'ghost-theme' : ''}`}>
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} onRequestShikikan={handleRequestShikikan} />
 
       <main className="content-area">
         <header className="top-nav">

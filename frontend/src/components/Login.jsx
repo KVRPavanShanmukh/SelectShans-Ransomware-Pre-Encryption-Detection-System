@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Lock, User, Mail, Key, ShieldCheck } from 'lucide-react';
 
-const Login = ({ onLogin, onSwitchToSignup }) => {
+const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
 
   const [step, setStep] = useState(0);
   const [creds, setCreds] = useState({ username: '', password: '' });
@@ -256,6 +256,16 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
             Create Account
           </span>
         </p>
+        
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 15, paddingTop: 15, textAlign: 'center' }}>
+          <button 
+            type="button" 
+            style={{ background: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: '0.8rem' }}
+            onClick={onSwitchToAdmin}
+          >
+            Admin Login
+          </button>
+        </div>
 
       </div>
     </div>
