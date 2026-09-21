@@ -10,7 +10,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # The repository URL will be passed as a build argument
-ARG REPO_URL="https://github.com/placeholder/repo.git"
+ARG REPO_URL="https://github.com/KVRPavanShanmukh/SelectShans-Ransomware-Pre-Encryption-Detection-System.git"
 
 # Set working directory
 WORKDIR /app
