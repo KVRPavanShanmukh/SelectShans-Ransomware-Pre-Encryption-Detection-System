@@ -1,0 +1,71 @@
+<Window x:Class="SelectShans.GUI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SelectShans Endpoint Guard" Height="450" Width="600"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Folder Selection -->
+        <GroupBox Header="Protected Folder" Grid.Row="0" Margin="0,0,0,10">
+            <Grid Margin="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtFolderPath" Grid.Column="0" IsReadOnly="True" Margin="0,0,5,0" VerticalContentAlignment="Center"/>
+                <Button x:Name="BtnBrowse" Grid.Column="1" Content="Browse..." Width="80" Padding="5,2" Click="BtnBrowse_Click"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Controls -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+            <Button x:Name="BtnStart" Content="Start Monitoring" Width="120" Padding="5,5" Margin="0,0,10,0" Click="BtnStart_Click" IsEnabled="False"/>
+            <Button x:Name="BtnStop" Content="Stop Monitoring" Width="120" Padding="5,5" Click="BtnStop_Click" IsEnabled="False"/>
+        </StackPanel>
+
+        <!-- Status & Stats -->
+        <GroupBox Header="Dashboard" Grid.Row="2" Margin="0,0,0,10">
+            <Grid Margin="5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,5">
+                    <TextBlock Text="Status:" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtStatus" Text="Stopped" Foreground="Gray" FontSize="16"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,5">
+                    <TextBlock Text="Risk Score:" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtRiskScore" Text="0" Foreground="Green" FontSize="16"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0">
+                    <TextBlock Text="Total Events:" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtTotalEvents" Text="0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="1">
+                    <TextBlock Text="Suspicious Events:" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtSuspiciousEvents" Text="0" Foreground="DarkRed"/>
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <!-- Recent Activity -->
+        <GroupBox Header="Recent Activity" Grid.Row="3">
+            <ListBox x:Name="LstActivity" Margin="5" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+        </GroupBox>
+    </Grid>
+</Window>
