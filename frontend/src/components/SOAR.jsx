@@ -139,7 +139,7 @@ const SOAR = ({ userId, apiBase = '' }) => {
               style={{
                 background: 'var(--danger)',
                 border: 'none',
-                color: '#fff',
+                color: '#1a202c',
                 padding: '10px 20px',
                 borderRadius: 4,
                 fontWeight: 700,

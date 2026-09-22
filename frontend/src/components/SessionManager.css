@@ -13,7 +13,7 @@
 }
 
 .session-popup {
-  background: rgba(5, 10, 14, 0.95);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--primary, #00FF41);
   padding: 28px 32px;
   border-radius: 8px;
@@ -69,7 +69,7 @@
 .session-popup-actions .btn-primary {
   background: #007CC3;
   border: 1px solid #007CC3;
-  color: #ffffff;
+  color: #1a202c;
 }
 
 .session-popup-actions .btn-primary:hover {

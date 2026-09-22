@@ -104,7 +104,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
   return (
     <div className="login-overlay" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)' }}>
       <div className="login-card" style={{ 
-        background: '#050510',
+        background: '#f8f9fa',
         border: '2px solid #0ff', 
         borderRadius: 0,
         boxShadow: '0 0 15px #0ff, inset 0 0 15px #0ff',
@@ -115,12 +115,12 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
         <div className="login-header" style={{ borderBottom: '1px solid #ff4d4d', paddingBottom: 15, marginBottom: 20 }}>
           <ShieldCheck size={48} color="#ff4d4d" style={{ filter: 'drop-shadow(0 0 5px #ff4d4d)' }} />
           <h2 style={{ color: '#ff4d4d', textShadow: '0 0 8px #ff4d4d', margin: '10px 0 5px' }}>GHOST - SHIKI-KAN</h2>
-          <p style={{ color: '#fff', fontSize: '0.8rem', letterSpacing: 2 }}>[ ADVANCED LAYER ACCESS ]</p>
+          <p style={{ color: '#ff4d4d', fontSize: '0.8rem', letterSpacing: 2 }}>[ ADVANCED LAYER ACCESS ]</p>
         </div>
 
         {step === 0 && (
           <form onSubmit={requestBetaOtp} style={{ textAlign: 'center' }}>
-            <p style={{ marginBottom: 20, color: '#fff', fontSize: '0.9rem', textTransform: 'none' }}>
+            <p style={{ marginBottom: 20, color: '#ff4d4d', fontSize: '0.9rem', textTransform: 'none' }}>
               &gt; WARNING: RESTRICTED ZONE <br/>
               &gt; ENTER GMAIL TO INITIATE TRACING...
             </p>
@@ -133,7 +133,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                style={{ background: 'transparent', color: '#fff', fontFamily: 'monospace' }}
+                style={{ background: 'transparent', color: '#ff4d4d', fontFamily: 'monospace' }}
               />
             </div>
 
@@ -154,7 +154,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
               <div style={{ marginTop: 20 }}>
                 <p style={{ color: '#ff4d4d', fontSize: '0.85rem' }}>&gt; ACCESS DENIED BY ADMIN</p>
                 <button type="button" onClick={handleRequestAccess} className="login-btn" style={{ 
-                  background: '#ff4d4d', color: '#fff', border: 'none', borderRadius: 0, marginTop: 5,
+                  background: '#ff4d4d', color: '#1a202c', border: 'none', borderRadius: 0, marginTop: 5,
                   boxShadow: '0 0 10px #ff4d4d', fontWeight: 'bold'
                 }} disabled={loading}>
                   {loading ? 'REQUESTING...' : 'REQUEST ACCESS'}
@@ -172,7 +172,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
 
         {step === 1 && (
           <form onSubmit={submitBetaCode}>
-            <p style={{ marginBottom: 15, fontSize: '0.85rem', color: '#fff', textTransform: 'none', borderLeft: '2px solid #ff4d4d', paddingLeft: 10 }}>
+            <p style={{ marginBottom: 15, fontSize: '0.85rem', color: '#ff4d4d', textTransform: 'none', borderLeft: '2px solid #ff4d4d', paddingLeft: 10 }}>
               &gt; PAYLOAD SENT TO GMAIL <br />
               &gt; FORMAT: [INT_OTP/STR_OTP INTERLEAVED]<br />
               &gt; EX: 5144 + sps &rarr; <span style={{color: '#ff4d4d'}}>5s1p4s4</span>
@@ -186,7 +186,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 required
-                style={{ background: 'transparent', color: '#fff', fontFamily: 'monospace' }}
+                style={{ background: 'transparent', color: '#ff4d4d', fontFamily: 'monospace' }}
               />
             </div>
 
@@ -201,7 +201,7 @@ const BetaLogin = ({ jwtToken, onBetaLoginSuccess, onCancel }) => {
             )}
 
             <button type="submit" className="login-btn" style={{ 
-              background: '#ff4d4d', color: '#fff', border: 'none', borderRadius: 0,
+              background: '#ff4d4d', color: '#1a202c', border: 'none', borderRadius: 0,
               boxShadow: '0 0 10px #ff4d4d', fontWeight: 'bold'
             }} disabled={loading}>
               {loading ? 'DECRYPTING...' : 'VERIFY_ACCESS & LOGIN'}

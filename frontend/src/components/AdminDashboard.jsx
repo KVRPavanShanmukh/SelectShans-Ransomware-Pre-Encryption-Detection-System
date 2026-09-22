@@ -183,7 +183,7 @@ const AdminDashboard = ({ jwtToken }) => {
         >
           Shiki-kan Requests
           {requestedUsers.length > 0 && (
-            <span style={{ background: '#ff4d4d', color: '#fff', borderRadius: '50%', padding: '2px 6px', fontSize: '0.7rem' }}>
+            <span style={{ background: '#ff4d4d', color: '#1a202c', borderRadius: '50%', padding: '2px 6px', fontSize: '0.7rem' }}>
               {requestedUsers.length}
             </span>
           )}

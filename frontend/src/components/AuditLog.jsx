@@ -101,7 +101,7 @@ const AuditLog = ({ userId, apiBase = '', onBack }) => {
                     top: 20,
                     right: 20,
                     background: messageType === 'success' ? '#10b981' : '#ef4444',
-                    color: '#fff',
+                    color: '#1a202c',
                     padding: '12px 20px',
                     borderRadius: 6,
                     zIndex: 1000,
@@ -119,7 +119,7 @@ const AuditLog = ({ userId, apiBase = '', onBack }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
                 {/* EXPORT OPTIONS CARD */}
-                <div className="card" style={{ background: 'rgba(5, 10, 14, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
+                <div className="card" style={{ background: 'rgba(255, 255, 255, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             <button
@@ -251,7 +251,7 @@ const AuditLog = ({ userId, apiBase = '', onBack }) => {
                 </div>
 
                 {/* LIVE AUDIT LOG PREVIEW TABLE */}
-                <div className="card" style={{ background: 'rgba(5, 10, 14, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
+                <div className="card" style={{ background: 'rgba(255, 255, 255, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
                     <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', color: '#f8fafc', fontFamily: 'JetBrains Mono, monospace', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Activity size={18} style={{ color: '#007CC3' }} /> Live Audit Log Inspection ({logs.length} events)
                     </h3>

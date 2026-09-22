@@ -162,14 +162,15 @@ def init_db(pool):
             );
         """)
 
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('admin', 'user') DEFAULT 'user';")
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR(20) DEFAULT '300706';")
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_access BOOLEAN DEFAULT FALSE;")
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_requested BOOLEAN DEFAULT FALSE;")
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;")
-        statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active DATETIME;")
-        statements.append("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500);")
-        statements.append("UPDATE users SET role = 'admin' WHERE username = 'admin';")
+        alter_statements = [
+            "ALTER TABLE users ADD COLUMN role ENUM('admin', 'user') DEFAULT 'user';",
+            "ALTER TABLE users ADD COLUMN dob VARCHAR(20) DEFAULT '300706';",
+            "ALTER TABLE users ADD COLUMN shikikan_access BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN shikikan_requested BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN is_online BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN last_active DATETIME;",
+            "ALTER TABLE user_profiles ADD COLUMN address VARCHAR(500);"
+        ]
         
         conn = pool.get_connection()
         cursor = conn.cursor()
@@ -179,6 +180,18 @@ def init_db(pool):
                     cursor.execute(stmt)
                 except Exception:
                     pass
+                    
+        for stmt in alter_statements:
+            try:
+                cursor.execute(stmt)
+            except Exception:
+                pass
+
+        try:
+            cursor.execute("UPDATE users SET role = 'admin' WHERE username = 'admin';")
+        except Exception:
+            pass
+            
         conn.commit()
         cursor.close()
         conn.close()

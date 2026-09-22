@@ -177,7 +177,7 @@ function App() {
             </div>
             <button 
               onClick={handleLogout}
-              style={{ background: '#ff4d4d', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+              style={{ background: '#ff4d4d', color: '#1a202c', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
             >
               Sign Out Admin
             </button>
@@ -214,7 +214,7 @@ function App() {
                 position: 'absolute',
                 top: '120%',
                 right: 0,
-                background: 'rgba(5, 10, 14, 0.95)',
+                background: 'rgba(255, 255, 255, 0.95)',
                 border: '1px solid var(--primary)',
                 borderRadius: 4,
                 width: 180,

@@ -7,13 +7,18 @@
   padding: 0;
 }
 
+::selection {
+  background-color: red;
+  color: white;
+}
+
 :root {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: dark;
-  color: #ffffff;
-  background-color: #000000;
+  color-scheme: light;
+  color: #1a202c;
+  background-color: #f0f4f8;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

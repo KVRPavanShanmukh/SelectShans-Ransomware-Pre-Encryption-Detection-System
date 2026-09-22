@@ -41,6 +41,7 @@ services:
       - MAIL_PASS=${MAIL_PASS:-your_key}
       - JWT_SECRET=${JWT_SECRET:-sentinelstream_super_secure_random_string_change_this_12345}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1d}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     depends_on:
       db:
         condition: service_healthy
