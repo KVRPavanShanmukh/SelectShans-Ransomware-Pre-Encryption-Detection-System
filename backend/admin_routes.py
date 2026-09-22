@@ -31,6 +31,11 @@ def register_admin_routes(app, pool):
         cursor = conn.cursor(dictionary=True)
         
         try:
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or user.get('role') != 'admin':
+                return jsonify({"error": "Admin access required"}), 403
+                
             if request.method == 'POST':
                 days = data.get('days')
                 cursor.execute("""
@@ -134,9 +139,14 @@ def register_admin_routes(app, pool):
         user_id = g.user['user_id']
         
         conn = pool.get_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         
         try:
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or user.get('role') != 'admin':
+                return jsonify({"error": "Admin access required"}), 403
+                
             # Delete event logs and related data
             cursor.execute("DELETE FROM event_logs")
             cursor.execute("DELETE FROM log_hashes")
@@ -267,6 +277,11 @@ def register_admin_routes(app, pool):
         cursor = conn.cursor(dictionary=True)
         
         try:
+            cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user or user.get('role') != 'admin':
+                return jsonify({"error": "Admin access required"}), 403
+                
             cursor.execute("""
                 SELECT a.id, a.user_id, a.action, a.description, a.ip_address, a.timestamp, u.username, u.email
                 FROM audit_log a
