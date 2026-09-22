@@ -96,7 +96,7 @@ const BetaTerminal = ({ jwtToken, betaToken, onClose }) => {
           onChange={e => setInput(e.target.value)}
           style={{
             flex: 1, background: 'transparent', border: 'none',
-            color: '#fff', fontFamily: '"Courier New", Courier, monospace', outline: 'none'
+            color: '#1a202c', fontFamily: '"Courier New", Courier, monospace', outline: 'none'
           }}
           disabled={isProcessing}
           autoFocus

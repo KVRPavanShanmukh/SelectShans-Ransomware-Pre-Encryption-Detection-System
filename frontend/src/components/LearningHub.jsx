@@ -15,7 +15,7 @@ const LearningHub = () => {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#050a0e',
-      color: '#fff',
+      color: '#1a202c',
       fontFamily: 'Inter, sans-serif',
       padding: '40px 20px',
       position: 'relative',

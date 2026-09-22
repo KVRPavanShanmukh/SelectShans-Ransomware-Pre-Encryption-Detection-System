@@ -80,7 +80,7 @@ const TechDetail = ({ techId }) => {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#050a0e',
-      color: '#fff',
+      color: '#1a202c',
       fontFamily: 'Inter, sans-serif',
       display: 'flex',
       flexDirection: 'column',
@@ -199,7 +199,7 @@ const TechDetail = ({ techId }) => {
             style={{
               background: 'rgba(255,255,255,0.1)',
               border: 'none',
-              color: '#fff',
+              color: '#1a202c',
               padding: '12px 24px',
               borderRadius: 8,
               cursor: 'pointer',
@@ -218,7 +218,7 @@ const TechDetail = ({ techId }) => {
             style={{
               background: tech.color,
               border: 'none',
-              color: '#fff',
+              color: '#1a202c',
               padding: '12px 24px',
               borderRadius: 8,
               cursor: 'pointer',

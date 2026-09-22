@@ -153,7 +153,7 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
             {error && (
               <div style={{
                 background: '#ef4444',
-                color: '#fff',
+                color: '#1a202c',
                 padding: '10px 15px',
                 borderRadius: 4,
                 marginBottom: 15,
@@ -214,7 +214,7 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
             {error && (
               <div style={{
                 background: '#ef4444',
-                color: '#fff',
+                color: '#1a202c',
                 padding: '10px 15px',
                 borderRadius: 4,
                 marginBottom: 15,

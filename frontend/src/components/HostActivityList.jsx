@@ -74,7 +74,7 @@ const HostActivityList = ({ userId, apiBase = '' }) => {
   };
 
   return (
-    <div className="card" style={{ background: 'rgba(5, 10, 14, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)', marginTop: 24 }}>
+    <div className="card" style={{ background: 'rgba(255, 255, 255, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)', marginTop: 24 }}>
       
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>

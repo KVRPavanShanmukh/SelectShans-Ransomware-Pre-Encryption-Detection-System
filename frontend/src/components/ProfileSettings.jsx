@@ -125,7 +125,7 @@ const ProfileSettings = ({ userId, apiBase = '', onBack }) => {
                     top: 20,
                     right: 20,
                     background: messageType === 'success' ? '#10b981' : '#ef4444',
-                    color: '#fff',
+                    color: '#1a202c',
                     padding: '12px 20px',
                     borderRadius: 6,
                     zIndex: 1000,
@@ -140,7 +140,7 @@ const ProfileSettings = ({ userId, apiBase = '', onBack }) => {
                 </div>
             )}
 
-            <div className="card" style={{ maxWidth: 650, margin: '0 auto', background: 'rgba(5, 10, 14, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
+            <div className="card" style={{ maxWidth: 650, margin: '0 auto', background: 'rgba(255, 255, 255, 0.95)', border: '1px solid rgba(0, 124, 195, 0.3)' }}>
                 
                 {/* HEADER */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -413,7 +413,7 @@ const ProfileSettings = ({ userId, apiBase = '', onBack }) => {
                             disabled={saving}
                             style={{
                                 background: '#007CC3',
-                                color: '#fff',
+                                color: '#1a202c',
                                 border: 'none',
                                 padding: '12px 24px',
                                 borderRadius: 6,

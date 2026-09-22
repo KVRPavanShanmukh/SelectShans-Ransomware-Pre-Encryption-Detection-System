@@ -110,7 +110,7 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
                     top: 20,
                     right: 20,
                     background: messageType === 'success' ? '#10b981' : '#ef4444',
-                    color: '#fff',
+                    color: '#1a202c',
                     padding: '12px 20px',
                     borderRadius: 4,
                     zIndex: 1000,
@@ -139,7 +139,7 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
                             onClick={() => setShowAdminMenu(!showAdminMenu)}
                             style={{
                                 background: '#007CC3',
-                                color: '#fff',
+                                color: '#1a202c',
                                 border: 'none',
                                 padding: '8px 16px',
                                 borderRadius: 4,
@@ -405,7 +405,7 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
                                     style={{
                                         display: 'flex', alignItems: 'center', gap: 8,
                                         background: detectorToken ? '#007CC3' : '#334155',
-                                        color: '#fff',
+                                        color: '#1a202c',
                                         border: 'none',
                                         padding: '8px 16px',
                                         borderRadius: 4,
