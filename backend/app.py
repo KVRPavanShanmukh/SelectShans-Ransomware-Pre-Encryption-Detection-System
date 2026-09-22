@@ -1305,14 +1305,26 @@ def generate_pdf_report(user_id, user_email):
 
 
 @app.route('/api/admin/security-report', methods=['GET'])
+@token_required
 def get_security_report_pdf():
-    user_id = request.args.get('user_id', type=int)
+    user_id = g.user['user_id']
+    target_user_id = request.args.get('user_id', type=int)
     
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        role_user = cursor.fetchone()
+        if not role_user or role_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+    except Exception as e:
+        cursor.close()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
     user = None
-    if user_id:
-        cursor.execute("SELECT id, email FROM users WHERE id = %s", (user_id,))
+    if target_user_id:
+        cursor.execute("SELECT id, email FROM users WHERE id = %s", (target_user_id,))
         user = cursor.fetchone()
         
     if not user:
@@ -1326,7 +1338,7 @@ def get_security_report_pdf():
         u_id = user["id"]
         u_email = user["email"]
     else:
-        u_id = user_id or 1
+        u_id = target_user_id or 1
         u_email = "admin@selectshans.sec"
 
     try:
@@ -1356,14 +1368,17 @@ def get_security_report_pdf():
 
 
 @app.route('/api/admin/realtime-stats', methods=['GET'])
+@token_required
 def get_realtime_stats():
-    user_id = request.args.get('user_id', type=int)
-    if not user_id:
-        return jsonify({"error": "user_id required"}), 400
+    user_id = g.user['user_id']
         
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        role_user = cursor.fetchone()
+        if not role_user or role_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
         # Calculate anomaly score based on unresolved critical alerts
         cursor.execute("SELECT COUNT(*) as count FROM alerts WHERE resolved = FALSE")
         unresolved_alerts = cursor.fetchone()["count"]
@@ -1483,10 +1498,18 @@ def refresh_jwt_token():
 
 
 @app.route('/api/alerts', methods=['GET'])
+@token_required
 def get_alerts():
+    user_id = g.user['user_id']
+    
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        role_user = cursor.fetchone()
+        if not role_user or role_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+            
         cursor.execute("SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 100")
         alerts = cursor.fetchall()
         for a in alerts:
@@ -1501,10 +1524,18 @@ def get_alerts():
 
 
 @app.route('/api/alerts/<int:alert_id>/resolve', methods=['POST'])
+@token_required
 def resolve_alert(alert_id):
+    user_id = g.user['user_id']
+    
     conn = pool.get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        role_user = cursor.fetchone()
+        if not role_user or role_user.get('role') != 'admin':
+            return jsonify({"error": "Admin access required"}), 403
+            
         cursor.execute("UPDATE alerts SET resolved = TRUE WHERE id = %s", (alert_id,))
         conn.commit()
         return jsonify({"status": "success", "message": f"Alert {alert_id} resolved"}), 200
