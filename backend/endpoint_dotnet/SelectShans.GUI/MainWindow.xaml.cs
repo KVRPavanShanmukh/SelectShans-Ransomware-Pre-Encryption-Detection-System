@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Windows;
-using System.Windows.Media;
 using Microsoft.Extensions.Options;
 using SelectShans.Endpoint.Configuration;
 using SelectShans.Endpoint.Detection;
@@ -15,14 +14,19 @@ namespace SelectShans.GUI
         private readonly DetectionEngine _detectionEngine;
         private readonly EndpointOptions _options;
 
-        public MainWindow(FileSystemMonitor fileSystemMonitor, DetectionEngine detectionEngine, IOptions<EndpointOptions> options)
+        public MainWindow(
+            FileSystemMonitor fileSystemMonitor,
+            DetectionEngine detectionEngine,
+            IOptions<EndpointOptions> options)
         {
             InitializeComponent();
+
             _fileSystemMonitor = fileSystemMonitor;
             _detectionEngine = detectionEngine;
             _options = options.Value;
 
-            if (!string.IsNullOrWhiteSpace(_options.ProtectedFolder) && Directory.Exists(_options.ProtectedFolder))
+            if (!string.IsNullOrWhiteSpace(_options.ProtectedFolder) &&
+                Directory.Exists(_options.ProtectedFolder))
             {
                 TxtFolderPath.Text = _options.ProtectedFolder;
                 BtnStart.IsEnabled = true;
@@ -49,9 +53,15 @@ namespace SelectShans.GUI
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(_options.ProtectedFolder) || !Directory.Exists(_options.ProtectedFolder))
+            if (string.IsNullOrWhiteSpace(_options.ProtectedFolder) ||
+                !Directory.Exists(_options.ProtectedFolder))
             {
-                System.Windows.MessageBox.Show("Please select a valid folder to protect.", "Invalid Folder", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show(
+                    "Please select a valid folder to protect.",
+                    "Invalid Folder",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
                 return;
             }
 
@@ -81,30 +91,42 @@ namespace SelectShans.GUI
         {
             Dispatcher.InvokeAsync(() =>
             {
-                TxtTotalEvents.Text = _detectionEngine.TotalEvents.ToString();
-                TxtSuspiciousEvents.Text = _detectionEngine.SuspiciousEvents.ToString();
-                TxtRiskScore.Text = _detectionEngine.CurrentRiskScore.ToString();
+                TxtTotalEvents.Text =
+                    _detectionEngine.TotalEvents.ToString();
+
+                TxtSuspiciousEvents.Text =
+                    _detectionEngine.SuspiciousEvents.ToString();
+
+                TxtRiskScore.Text =
+                    _detectionEngine.CurrentRiskScore.ToString();
 
                 if (_detectionEngine.CurrentRiskScore >= 80)
                 {
-                    TxtRiskScore.Foreground = System.Windows.Media.Brushes.Red;
+                    TxtRiskScore.Foreground =
+                        System.Windows.Media.Brushes.Red;
+
                     if (TxtStatus.Text != "Stopped")
                     {
                         TxtStatus.Text = "High Risk";
-                        TxtStatus.Foreground = System.Windows.Media.Brushes.Red;
+                        TxtStatus.Foreground =
+                            System.Windows.Media.Brushes.Red;
                     }
                 }
                 else if (_detectionEngine.CurrentRiskScore >= 50)
                 {
-                    TxtRiskScore.Foreground = System.Windows.Media.Brushes.Orange;
+                    TxtRiskScore.Foreground =
+                        System.Windows.Media.Brushes.Orange;
+
                     if (TxtStatus.Text != "Stopped")
                     {
                         TxtStatus.Text = "Warning";
-                        TxtStatus.Foreground = System.Windows.Media.Brushes.Orange;
+                        TxtStatus.Foreground =
+                            System.Windows.Media.Brushes.Orange;
                     }
                 }
 
                 LstActivity.Items.Clear();
+
                 lock (_detectionEngine.RecentActivity)
                 {
                     foreach (var act in _detectionEngine.RecentActivity)
