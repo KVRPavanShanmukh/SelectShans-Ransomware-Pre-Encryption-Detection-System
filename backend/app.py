@@ -726,17 +726,38 @@ def detector_download():
 
     buffer = io.BytesIO()
 
+    # The new WPF endpoint is published here
+    dotnet_publish_dir = Path(__file__).resolve().parent / "endpoint_dotnet_publish"
+
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         backend_url = os.getenv("BACKEND_API_URL", request.url_root.rstrip("/"))
-        zf.writestr("config.json", json.dumps({
-            "api_base": backend_url,
-            "token": token,
-            "email": info["email"]
-        }, indent=2))
+        
+        # Read the existing appsettings.json from the published directory (if it exists)
+        # to ensure we keep other defaults like thresholds.
+        appsettings_path = dotnet_publish_dir / "appsettings.json"
+        if appsettings_path.exists():
+            with open(appsettings_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        else:
+            settings = {"EndpointOptions": {}}
 
-        for file in DETECTOR_PACKAGE_DIR.rglob("*"):
-            if file.is_file():
-                zf.write(file, file.relative_to(DETECTOR_PACKAGE_DIR))
+        if "EndpointOptions" not in settings:
+            settings["EndpointOptions"] = {}
+            
+        settings["EndpointOptions"]["BackendApiUrl"] = backend_url
+        settings["EndpointOptions"]["DetectorToken"] = token
+        
+        # Write the modified appsettings.json to the zip
+        zf.writestr("appsettings.json", json.dumps(settings, indent=2))
+
+        # Zip all files from the publish directory, EXCEPT appsettings.json since we just wrote it
+        if dotnet_publish_dir.exists():
+            for file in dotnet_publish_dir.rglob("*"):
+                if file.is_file() and file.name != "appsettings.json":
+                    # Filter out test binaries, PDBs, etc if present (though a clean publish shouldn't have test projects)
+                    if file.suffix.lower() == ".pdb":
+                        continue
+                    zf.write(file, file.relative_to(dotnet_publish_dir))
 
     buffer.seek(0)
 
@@ -744,7 +765,7 @@ def detector_download():
         buffer,
         mimetype="application/zip",
         as_attachment=True,
-        download_name="SelectShans-FolderGuard.zip"
+        download_name="SelectShans-Endpoint.zip"
     )
 
 
