@@ -252,12 +252,12 @@ function App() {
         </header>
 
         <div className="main-view">
-          {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} logsUploaded={logsUploaded} />}
+          {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} apiBase={API_URL} logsUploaded={logsUploaded} />}
           {!adminTab && activeTab === 'upload' && <FileUploader onLogsUploaded={() => setLogsUploaded(true)} />}
           {!adminTab && activeTab === 'logs' && <SysmonLogs />}
           {!adminTab && activeTab === 'protection' && <ActiveShield />}
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
-          {!adminTab && activeTab === 'soar' && <SOAR userId={userId} />}
+          {!adminTab && activeTab === 'soar' && <SOAR userId={userId} apiBase={API_URL} />}
           {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} /> }
           
           {!adminTab && activeTab === 'beta' && !betaToken && (

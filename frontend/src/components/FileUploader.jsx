@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, ShieldAlert, ShieldCheck, FileText } from 'lucide-react';
+import { API_URL } from '../config';
 
 const formatBytes = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,7 +35,7 @@ const FileUploader = ({ onLogsUploaded }) => {
       formData.append('file', files[0]); // Analyze first file for now
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/analyze-file', {
+      const response = await fetch(`${API_URL}/api/analyze-file`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

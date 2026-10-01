@@ -11,3 +11,4 @@ reportlab==4.0.7
 APScheduler==3.10.4
 matplotlib==3.8.2
 Werkzeug==3.0.1
+gunicorn==23.0.0
