@@ -62,10 +62,21 @@ desktop.ini
 .idea/
 
 # =========================
+# Python generated files
+# =========================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# =========================
 # Build / publish output
 # =========================
 publish/
 releases/
+**/*_publish/
+**/publish/
+**/releases/
 
 # =========================
 # Local secrets / certificates

@@ -87,8 +87,9 @@ dbconf = {
     "password": db_pass
 }
 
-# Auto-create database if it doesn't exist
-if not is_vercel:
+# Auto-create database if it doesn't exist (skip in production/vercel)
+is_production = APP_ENV.lower() == "production"
+if not (is_vercel or is_production):
     try:
         print("Pre-connecting to MySQL to verify/create database...")
         import mysql.connector
@@ -1594,4 +1595,6 @@ def run_daily_summary():
 # =====================================================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
+    port = int(os.getenv("PORT", 10000))
+    debug_mode = APP_ENV.lower() != "production"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
