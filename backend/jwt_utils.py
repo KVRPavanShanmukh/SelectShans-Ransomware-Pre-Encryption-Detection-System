@@ -26,14 +26,15 @@ def get_token_expiry_timedelta():
     else:
         return timedelta(minutes=int(expires_in)) # Default to minutes if no suffix
 
-def create_token(user_id, username, email):
-    """Create JWT token with configurable expiry"""
+def create_token(user_id, username, email, expiry_timedelta=None):
+    """Create JWT token with configurable expiry or custom duration"""
+    delta = expiry_timedelta if expiry_timedelta is not None else get_token_expiry_timedelta()
     payload = {
         'user_id': user_id,
         'username': username,
         'email': email,
         'iat': datetime.now(timezone.utc),
-        'exp': datetime.now(timezone.utc) + get_token_expiry_timedelta()
+        'exp': datetime.now(timezone.utc) + delta
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
@@ -47,6 +48,15 @@ def verify_token(token):
         return None
     except jwt.InvalidTokenError as e:
         print(f"InvalidTokenError: {e}")
+        return None
+
+def decode_token_ignore_exp(token):
+    """Decode token payload without verifying expiration (for session grace/extension evaluation)"""
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        return payload
+    except jwt.InvalidTokenError as e:
+        print(f"InvalidTokenError in ignore_exp: {e}")
         return None
 
 def refresh_token(token):
@@ -71,7 +81,7 @@ def token_required(f):
             except IndexError:
                 return jsonify({'error': 'Invalid token format'}), 401
         
-        if not token:
+        if not token or token in ('null', 'undefined', ''):
             print("Token missing in headers")
             return jsonify({'error': 'Token missing'}), 401
         

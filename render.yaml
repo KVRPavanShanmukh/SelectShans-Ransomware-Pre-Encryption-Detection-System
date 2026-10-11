@@ -32,3 +32,9 @@ services:
         sync: false
       - key: MAIL_PASS
         sync: false
+      - key: JWT_EXPIRES_IN
+        value: 30m
+      - key: BACKEND_API_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
