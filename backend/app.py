@@ -11,6 +11,8 @@ import io
 import zipfile
 import random
 import jwt
+import threading
+import time
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -37,7 +39,7 @@ from mysql.connector import pooling
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # JWT and utilities
-from jwt_utils import create_token, verify_token, refresh_token, token_required
+from jwt_utils import create_token, verify_token, refresh_token, token_required, decode_token_ignore_exp
 from admin_routes import register_admin_routes
 
 # PDF + Graph
@@ -56,8 +58,15 @@ import matplotlib.pyplot as plt
 # =====================================================
 
 app = Flask(__name__)
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5174")
-CORS(app, resources={r"/*": {"origins": frontend_url}})
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+allowed_origins = list(set(filter(None, [
+    frontend_url,
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174"
+])))
+CORS(app, resources={r"/*": {"origins": "*" if APP_ENV != "production" else allowed_origins}})
 
 print("Starting SelectShans Backend...")
 
@@ -1017,84 +1026,110 @@ def upload_log():
 # =====================================================
 # STATIC FILE ANALYSIS
 # =====================================================
-import math
-
-def calculate_entropy(data):
-    if not data:
-        return 0.0
-    entropy = 0
-    for x in range(256):
-        p_x = float(data.count(x)) / len(data)
-        if p_x > 0:
-            entropy += - p_x * math.log(p_x, 2)
-    return entropy
+from static_analyzer import analyze_file_data, calculate_entropy_fast, MAX_ANALYSIS_BYTES
+from werkzeug.utils import secure_filename
 
 @app.route('/api/analyze-file', methods=['POST'])
-@token_required
 def analyze_file():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
+    # Attempt token verification if provided
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header and ' ' in auth_header:
+        token = auth_header.split(' ')[1]
+        if token and token not in ('null', 'undefined', ''):
+            g.user = verify_token(token)
+
+    # Check for file parameter in multipart form
+    if 'file' not in request.files and 'files' not in request.files:
+        return jsonify({"error": "No file uploaded. Please select a file to scan."}), 400
     
-    file = request.files['file']
-    if file.filename == '':
+    file = request.files.get('file') or request.files.get('files')
+    if not file or file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
+    # Path traversal protection: preserve relative path display if passed via form, but sanitize base filename
+    raw_rel_path = request.form.get('relative_path', '').strip()
+    # Sanitize relative path to prevent directory traversal
+    clean_rel_parts = [secure_filename(part) for part in raw_rel_path.replace('\\', '/').split('/') if part and part not in ('.', '..')]
+    safe_rel_path = "/".join(clean_rel_parts) if clean_rel_parts else secure_filename(file.filename)
+    safe_filename = secure_filename(os.path.basename(file.filename)) or "unnamed_payload"
+
     try:
-        # Read file into memory (limit size for safety, e.g., max 10MB)
-        file_data = file.read(10 * 1024 * 1024)
-        
-        # Calculate SHA-256
-        file_hash = hashlib.sha256(file_data).hexdigest()
-        
-        # Calculate size
-        file_size = len(file_data)
-        
-        # Calculate entropy
-        entropy = calculate_entropy(file_data)
-        
-        # Extract extension
-        ext = os.path.splitext(file.filename)[1].lower()
-        
-        # Basic heuristic analysis
-        suspicious_extensions = ['.locked', '.crypto', '.enc', '.crypted', '.ransom', '.wnry', '.zepto']
-        
-        risk_score = 10
-        indicators = []
-        
-        if ext in suspicious_extensions:
-            risk_score += 60
-            indicators.append(f"Suspicious file extension detected: {ext}")
-            
-        if entropy > 7.5:
-            risk_score += 30
-            indicators.append(f"High entropy ({entropy:.2f}) indicates encrypted or compressed payload.")
-        elif entropy > 7.0:
-            risk_score += 15
-            indicators.append(f"Elevated entropy ({entropy:.2f}).")
-            
-        if ext in ['.exe', '.dll', '.scr', '.bat', '.cmd', '.vbs', '.js']:
-            risk_score += 20
-            indicators.append(f"Executable script or binary format ({ext}).")
-            
-        severity = "LOW"
-        if risk_score > 70:
-            severity = "HIGH"
-        elif risk_score > 40:
-            severity = "MEDIUM"
-            
-        return jsonify({
-            "filename": file.filename,
-            "sha256": file_hash,
-            "size": file_size,
-            "entropy": round(entropy, 2),
-            "risk_score": min(risk_score, 100),
-            "severity": severity,
-            "indicators": indicators
-        }), 200
+        # Check actual length without silently truncating
+        file.seek(0, os.SEEK_END)
+        actual_size = file.tell()
+        file.seek(0)
+
+        # Check if oversized
+        is_oversized = actual_size > MAX_ANALYSIS_BYTES
+        if is_oversized:
+            result = analyze_file_data(
+                filename=safe_filename,
+                file_data=b"",
+                is_truncated=True,
+                original_size=actual_size
+            )
+            result["relative_path"] = safe_rel_path
+            return jsonify(result), 413
+
+        # Read full content safely within limit
+        file_data = file.read(MAX_ANALYSIS_BYTES + 1)
+        if len(file_data) > MAX_ANALYSIS_BYTES:
+            result = analyze_file_data(
+                filename=safe_filename,
+                file_data=b"",
+                is_truncated=True,
+                original_size=actual_size
+            )
+            result["relative_path"] = safe_rel_path
+            return jsonify(result), 413
+
+        # Run heuristic and signature analysis
+        result = analyze_file_data(
+            filename=safe_filename,
+            file_data=file_data,
+            is_truncated=False,
+            original_size=actual_size
+        )
+        result["relative_path"] = safe_rel_path
+
+        # Log alert to SOC alerts database if malicious or high-risk suspicious
+        if result.get("verdict") == "MALICIOUS" or (result.get("verdict") == "SUSPICIOUS" and result.get("risk_score", 0) >= 60):
+            try:
+                conn = pool.get_connection()
+                cursor = conn.cursor()
+                indicators_str = "; ".join(result.get("indicators", []))
+                cursor.execute("""
+                    INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
+                    VALUES (%s, %s, %s, %s, %s, FALSE)
+                """, (
+                    result.get("severity", "HIGH"),
+                    f"Threat Sandbox: {safe_filename}",
+                    0,
+                    f"Verdict {result.get('verdict')} ({result.get('risk_score')}%): {indicators_str}",
+                    "Flagged in Sandbox Telemetry"
+                ))
+                conn.commit()
+                cursor.close()
+                conn.close()
+            except Exception as db_err:
+                print("Note: Could not log sandbox alert to database:", db_err)
+
+        return jsonify(result), 200
         
     except Exception as e:
         print("Analysis error:", e)
-        return jsonify({"error": "Analysis failed"}), 500
+        return jsonify({
+            "filename": safe_filename,
+            "relative_path": safe_rel_path,
+            "verdict": "ERROR",
+            "severity": "HIGH",
+            "risk_score": None,
+            "indicators": ["Internal analysis error occurred during scanning."],
+            "status": "FAILED",
+            "error": "Internal processing failure"
+        }), 500
+
+
 
 
 # =====================================================
@@ -1484,10 +1519,225 @@ def send_daily_summary():
 # TOKEN MANAGEMENT ENDPOINTS
 # =====================================================
 
+# Global tracking for active and passive sessions
+_session_activity_lock = threading.Lock()
+_active_user_last_seen = {}       # user_id -> datetime
+_user_cumulative_extension = {}   # user_id -> total_extended_seconds (max 600s = 10 min)
+
+# Network metrics caching (60s measurement window)
+_net_metrics_cache = {
+    "last_bytes_sent": 0,
+    "last_bytes_recv": 0,
+    "last_timestamp": 0,
+    "current_mbps": None,
+    "measured_window_sec": 60,
+    "status": "UNAVAILABLE"
+}
+
+def update_network_metrics():
+    """Lightweight real-world throughput measurement over sampling interval via psutil"""
+    try:
+        import psutil
+        now = time.time()
+        net_io = psutil.net_io_counters()
+        total_bytes = net_io.bytes_sent + net_io.bytes_recv
+        
+        last_total = _net_metrics_cache["last_bytes_sent"] + _net_metrics_cache["last_bytes_recv"]
+        last_t = _net_metrics_cache["last_timestamp"]
+        
+        if last_t > 0 and (now - last_t) >= 1.0:
+            elapsed = now - last_t
+            byte_diff = total_bytes - last_total
+            if byte_diff >= 0:
+                # Convert bytes/sec to Megabits per second (Mbps)
+                mbps = round((byte_diff * 8) / (elapsed * 1_000_000), 2)
+                _net_metrics_cache["current_mbps"] = mbps
+                _net_metrics_cache["status"] = "MEASURED"
+                _net_metrics_cache["measured_window_sec"] = int(elapsed)
+        
+        _net_metrics_cache["last_bytes_sent"] = net_io.bytes_sent
+        _net_metrics_cache["last_bytes_recv"] = net_io.bytes_recv
+        _net_metrics_cache["last_timestamp"] = now
+    except Exception as e:
+        _net_metrics_cache["status"] = "UNAVAILABLE"
+        _net_metrics_cache["current_mbps"] = None
+
+@app.route('/api/session/stats', methods=['GET'])
+def get_session_stats():
+    """
+    Returns authentic server-scoped session metrics and real network throughput.
+    Definitions:
+      - Active Sessions: Users with verified activity within the active threshold (last 5 minutes)
+      - Passive Sessions: Users logged in but idle/inactive between 5 and 30 minutes
+      - Network Throughput: Measured server interface network load in Mbps
+    """
+    update_network_metrics()
+    now_utc = datetime.now(timezone.utc)
+    
+    active_count = 0
+    passive_count = 0
+
+    with _session_activity_lock:
+        # Prune very old entries (> 24 hours)
+        stale_threshold = now_utc - timedelta(hours=24)
+        to_prune = [uid for uid, dt in _active_user_last_seen.items() if dt < stale_threshold]
+        for uid in to_prune:
+            _active_user_last_seen.pop(uid, None)
+            _user_cumulative_extension.pop(uid, None)
+
+        for uid, last_dt in _active_user_last_seen.items():
+            diff_seconds = (now_utc - last_dt).total_seconds()
+            if diff_seconds <= 300:  # <= 5 min: Active
+                active_count += 1
+            elif diff_seconds <= 1800:  # 5 min - 30 min: Passive
+                passive_count += 1
+
+    # Ensure baseline includes any host detector pings
+    active_detectors_count = sum(1 for ping in _active_detectors.values() if (now_utc - ping).total_seconds() < 30)
+
+    # If database connection is active, cross-reference with users table
+    try:
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE is_online = TRUE AND last_active >= NOW() - INTERVAL 5 MINUTE")
+        db_active = cursor.fetchone()["cnt"]
+        cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE last_active >= NOW() - INTERVAL 30 MINUTE AND last_active < NOW() - INTERVAL 5 MINUTE")
+        db_passive = cursor.fetchone()["cnt"]
+        cursor.close()
+        conn.close()
+        
+        active_count = max(active_count, db_active)
+        passive_count = max(passive_count, db_passive)
+    except Exception:
+        pass
+
+    total_active_sessions = max(1, active_count)  # At least current session querying
+    
+    return jsonify({
+        "status": "success",
+        "timestamp": now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "metrics": {
+            "active_sessions": total_active_sessions,
+            "passive_sessions": passive_count,
+            "active_detectors": active_detectors_count,
+            "network_throughput_mbps": _net_metrics_cache["current_mbps"],
+            "network_metrics_status": _net_metrics_cache["status"],
+            "measurement_window_seconds": _net_metrics_cache["measured_window_sec"],
+            "is_measured": _net_metrics_cache["status"] == "MEASURED"
+        },
+        "policy": {
+            "max_extension_minutes": 10,
+            "cumulative_max_minutes": 10,
+            "description": "Each passive session extension grants a random duration bounded between 1 and 10 minutes, with a strict server-enforced cumulative limit of 10 minutes total per session."
+        }
+    }), 200
+
+@app.route('/api/session/extend', methods=['POST'])
+def extend_session():
+    """
+    Extends a session by a server-authoritative random duration between 1 and 10 minutes.
+    Enforces a strict cumulative maximum extension policy of 10 minutes (600 seconds).
+    Rejects expired tokens beyond the allowed 60-second grace evaluation window.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    token = None
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:].strip()
+    else:
+        try:
+            data = request.get_json(silent=True) or {}
+            token = data.get('token')
+        except Exception:
+            token = None
+
+    if not token or token in ('null', 'undefined', ''):
+        return jsonify({"error": "Authentication token required for session extension."}), 401
+
+    # First attempt standard validation
+    payload = verify_token(token)
+    token_is_expired = False
+    
+    if not payload:
+        # Check if token is within a short 60-second grace window after expiry to allow immediate user prompt extension
+        unverified_payload = decode_token_ignore_exp(token)
+        if not unverified_payload or 'exp' not in unverified_payload:
+            return jsonify({"error": "Session token is invalid. Please log in again."}), 401
+        
+        now_epoch = datetime.now(timezone.utc).timestamp()
+        exp_epoch = unverified_payload['exp']
+        # If expired by more than 60 seconds grace period, strictly reject revival
+        if (now_epoch - exp_epoch) > 60:
+            return jsonify({
+                "error": "Session has expired beyond the allowable grace period. You must log in again.",
+                "expired": True
+            }), 401
+        
+        payload = unverified_payload
+        token_is_expired = True
+
+    user_id = payload.get('user_id')
+    username = payload.get('username')
+    email = payload.get('email')
+
+    if not user_id:
+        return jsonify({"error": "Invalid token identity."}), 401
+
+    with _session_activity_lock:
+        current_cumulative = _user_cumulative_extension.get(user_id, 0)
+        remaining_cumulative = 600 - current_cumulative  # 600s = 10 minutes max total
+
+        if remaining_cumulative <= 0:
+            return jsonify({
+                "error": "Session extension limit reached. The maximum cumulative extension of 10 minutes has been exhausted.",
+                "cumulative_limit_reached": True,
+                "cumulative_extended_seconds": current_cumulative
+            }), 403
+
+        # Generate server-authoritative random extension between 1 and min(10, remaining_minutes)
+        max_possible_minutes = max(1, remaining_cumulative // 60)
+        # Select uniformly at random between 1 and max_possible_minutes
+        granted_minutes = random.randint(1, min(10, max_possible_minutes))
+        granted_seconds = granted_minutes * 60
+        
+        # Apply bounds check
+        if granted_seconds > remaining_cumulative:
+            granted_seconds = remaining_cumulative
+            granted_minutes = max(1, granted_seconds // 60)
+
+        _user_cumulative_extension[user_id] = current_cumulative + granted_seconds
+        _active_user_last_seen[user_id] = datetime.now(timezone.utc)
+
+    # Issue server-authoritative token with the newly extended expiry
+    new_token = create_token(user_id, username, email, expiry_timedelta=timedelta(seconds=granted_seconds))
+    now_epoch = datetime.now(timezone.utc).timestamp()
+    new_expires_at = now_epoch + granted_seconds
+
+    # Update database session activity if connection available
+    try:
+        conn = pool.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET is_online = TRUE, last_active = NOW() WHERE id = %s", (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+    return jsonify({
+        "status": "success",
+        "message": f"Session extended by {granted_minutes} minutes.",
+        "token": new_token,
+        "extension_minutes": granted_minutes,
+        "extension_seconds": granted_seconds,
+        "expires_in": granted_seconds,
+        "expires_at_epoch": int(new_expires_at),
+        "cumulative_extended_minutes": round(_user_cumulative_extension.get(user_id, 0) / 60, 1),
+        "remaining_cumulative_minutes": max(0, round((600 - _user_cumulative_extension.get(user_id, 0)) / 60, 1))
+    }), 200
+
 @app.route('/api/token/refresh', methods=['POST'])
 def refresh_jwt_token():
-    """Refresh JWT token to extend session"""
-    # Try to get token from Authorization header first, then from JSON
+    """Standard token refresh within valid active session"""
     auth_header = request.headers.get('Authorization', '')
     token = None
     
@@ -1497,16 +1747,21 @@ def refresh_jwt_token():
         data = request.get_json() or {}
         token = data.get('token')
     
-    if not token:
+    if not token or token in ('null', 'undefined', ''):
         return jsonify({"error": "Token required"}), 400
     
-    new_token = refresh_token(token)
-    if not new_token:
+    payload = verify_token(token)
+    if not payload:
         return jsonify({"error": "Token invalid or expired"}), 401
     
+    user_id = payload.get('user_id')
+    with _session_activity_lock:
+        _active_user_last_seen[user_id] = datetime.now(timezone.utc)
+
+    new_token = refresh_token(token)
     return jsonify({
         "token": new_token,
-        "expires_in": 30 * 60  # 30 minutes in seconds
+        "expires_in": 30 * 60
     }), 200
 
 

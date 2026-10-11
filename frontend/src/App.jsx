@@ -199,7 +199,14 @@ function App() {
           <div className="search-bar">
             <input type="text" placeholder="Search logs, hashes, PIDs, paths..." />
           </div>
-          <SessionManager onLogout={handleLogout} />
+          <SessionManager 
+            jwtToken={jwtToken} 
+            onLogout={handleLogout} 
+            onTokenUpdated={(newToken) => {
+              localStorage.setItem('jwtToken', newToken);
+              setJwtToken(newToken);
+            }} 
+          />
           <div className="user-profile" style={{ position: 'relative' }}>
             <span className="status-badge">Admin: Active</span>
             <div
@@ -253,7 +260,7 @@ function App() {
 
         <div className="main-view">
           {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} apiBase={API_URL} logsUploaded={logsUploaded} />}
-          {!adminTab && activeTab === 'upload' && <FileUploader onLogsUploaded={() => setLogsUploaded(true)} />}
+          {!adminTab && activeTab === 'upload' && <FileUploader jwtToken={jwtToken} onLogsUploaded={() => setLogsUploaded(true)} />}
           {!adminTab && activeTab === 'logs' && <SysmonLogs />}
           {!adminTab && activeTab === 'protection' && <ActiveShield />}
           {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
