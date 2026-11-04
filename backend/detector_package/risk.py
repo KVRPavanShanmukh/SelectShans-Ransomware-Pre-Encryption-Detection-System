@@ -71,15 +71,25 @@ class RiskEngine:
         if extension_info and extension_info.get("is_suspicious"):
             ext = extension_info.get("ransom_ext")
             orig = extension_info.get("original_ext")
-            score += 85
-            category = "Ransomware Extension Rename"
-            if extension_info.get("is_double_ext"):
-                reasons.append(f"Double extension pattern detected: '{orig}' format renamed with ransomware extension '{ext}'.")
+            if event_count <= 1:
+                # Isolated suspicious extension rename: High alert, but not premature CRITICAL panic
+                score += 65
+                category = "Suspicious Extension Rename (Isolated)"
+                if extension_info.get("is_double_ext"):
+                    reasons.append(f"Isolated double extension pattern: '{orig}' format renamed with ransomware extension '{ext}'.")
+                else:
+                    reasons.append(f"Isolated file renamed with known ransomware extension '{ext}'.")
+                recommended_response = (
+                    "Inspect recent file activity and monitor directory for subsequent renames. Verify user intent."
+                )
             else:
-                reasons.append(f"Target file given known ransomware extension '{ext}'.")
-            recommended_response = (
-                "High probability ransomware activity. Terminate suspicious processes, check VSS/Volume Shadow Copies, and verify backup state."
-            )
+                # Multiple suspicious renames: Escalates to CRITICAL
+                score += 85 + min((event_count - 2) * 5, 15)
+                category = "Ransomware Extension Renaming Campaign"
+                reasons.append(f"Multiple suspicious extension renames ({event_count} files) matching ransomware pattern '{ext}'.")
+                recommended_response = (
+                    "High probability ransomware activity. Terminate suspicious processes, check VSS/Volume Shadow Copies, and verify backup state."
+                )
 
         # 3. Entropy Signal
         if entropy_info and entropy_info.get("is_surge"):

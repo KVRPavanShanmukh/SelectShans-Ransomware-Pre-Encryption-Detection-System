@@ -96,6 +96,7 @@ class BehavioralDetectionEngine:
         self._write_window: deque[Tuple[float, str, Dict[str, Any]]] = deque()
         self._delete_window: deque[Tuple[float, str]] = deque()
         self._create_window: deque[Tuple[float, str]] = deque()
+        self._suspicious_ext_window: deque[Tuple[float, str]] = deque()
 
         self._lock = threading.Lock()
         self._total_events_processed = 0
@@ -125,6 +126,8 @@ class BehavioralDetectionEngine:
             self._delete_window.popleft()
         while self._create_window and self._create_window[0][0] < cutoff:
             self._create_window.popleft()
+        while self._suspicious_ext_window and self._suspicious_ext_window[0][0] < cutoff:
+            self._suspicious_ext_window.popleft()
 
     def process_file_created(self, filepath: str) -> Optional[DetectionDecision]:
         """Handles file creation event."""
@@ -146,6 +149,9 @@ class BehavioralDetectionEngine:
             # Check if created with suspicious extension (e.g. ransomware payload or immediate encrypted drop)
             ext_info = self.extension_detector.analyze_path(filepath)
             if ext_info["is_suspicious"]:
+                self._suspicious_ext_window.append((now, filepath))
+                ext_count = len(self._suspicious_ext_window)
+
                 cooldown_key = f"ext_create_{filepath}"
                 if not self.risk_engine.is_cooling_down(cooldown_key):
                     proc_info = self.process_attributor.attribute_event(filepath, check_handles=True)
@@ -153,7 +159,7 @@ class BehavioralDetectionEngine:
                         event_type="ransomware_extension_create",
                         directory=self.monitored_directory,
                         target_file=os.path.basename(filepath),
-                        event_count=1,
+                        event_count=ext_count,
                         extension_info=ext_info,
                         process_info=proc_info
                     )
@@ -164,7 +170,7 @@ class BehavioralDetectionEngine:
                         severity=evaluation["severity"],
                         score=evaluation["score"],
                         category=evaluation["category"],
-                        event_count=1,
+                        event_count=ext_count,
                         action_taken=evaluation["recommended_response"],
                         process_name=proc_info.get("process_name", "unknown"),
                         details=evaluation["explanation"],
@@ -180,9 +186,8 @@ class BehavioralDetectionEngine:
         now = time.time()
         self._total_events_processed += 1
 
-        # 1. Immediate Canary Check
-        canary_alert = self.canary_manager.identify_canary_event(filepath, "modified")
-        if canary_alert:
+        # 1. Canary Tamper Check (Immediate evaluation, no window required)
+        if self.canary_manager.is_canary(filepath):
             cooldown_key = f"canary_mod_{filepath}"
             if not self.risk_engine.is_cooling_down(cooldown_key):
                 proc_info = self.process_attributor.attribute_event(filepath, check_handles=True)
@@ -208,21 +213,35 @@ class BehavioralDetectionEngine:
                     evidence=evaluation["evidence"]
                 )
 
-        # 2. Entropy analysis on modified file
-        entropy_res = self.entropy_tracker.analyze_modification(filepath)
+        # 2. Entropy Analysis & Tracking
+        entropy_info = self.entropy_tracker.analyze_modification(
+            filepath,
+            entropy_threshold=self.entropy_threshold
+        )
 
         with self._lock:
             self._prune_windows(now)
             if len(self._write_window) >= self.max_queue_size:
                 self._write_window.popleft()
-            self._write_window.append((now, filepath, entropy_res))
+            self._write_window.append((now, filepath, entropy_info))
 
             write_count = len(self._write_window)
             entropy_surge_count = sum(1 for _, _, e in self._write_window if e.get("is_surge"))
 
-            # Multi-signal check: rapid writes + entropy surges
-            if write_count >= self.threshold_write or (entropy_surge_count >= 2 and write_count >= 3):
-                cooldown_key = f"mass_write_{self.monitored_directory}"
+            # Multi-signal check: Immediate alert if entropy surge detected on multiple modifications
+            # or if modification burst threshold reached
+            should_alert = False
+            primary_event_type = "mass_write"
+
+            if entropy_surge_count >= 2:
+                should_alert = True
+                primary_event_type = "encryption_surge"
+            elif write_count >= self.threshold_write:
+                should_alert = True
+                primary_event_type = "mass_write"
+
+            if should_alert:
+                cooldown_key = f"{primary_event_type}_{self.monitored_directory}"
                 if not self.risk_engine.is_cooling_down(cooldown_key):
                     proc_info = self.process_attributor.attribute_event(filepath, check_handles=True)
                     correlated = {
@@ -231,11 +250,11 @@ class BehavioralDetectionEngine:
                         "entropy_surges": entropy_surge_count
                     }
                     evaluation = self.risk_engine.evaluate_signals(
-                        event_type="mass_write" if entropy_surge_count == 0 else "encryption_surge",
+                        event_type=primary_event_type,
                         directory=self.monitored_directory,
                         target_file=os.path.basename(filepath),
                         event_count=write_count,
-                        entropy_info=entropy_res,
+                        entropy_info=entropy_info,
                         process_info=proc_info,
                         correlated_events=correlated
                     )
@@ -296,6 +315,11 @@ class BehavioralDetectionEngine:
         # 2. Suspicious Ransomware Extension Check (Immediate trigger)
         rename_analysis = self.extension_detector.analyze_rename(src_path, dest_path)
         if rename_analysis["is_ransom_rename"]:
+            with self._lock:
+                self._prune_windows(now)
+                self._suspicious_ext_window.append((now, dest_path))
+                ext_count = len(self._suspicious_ext_window)
+
             cooldown_key = f"ransom_ext_rename_{dest_path}"
             if not self.risk_engine.is_cooling_down(cooldown_key):
                 proc_info = self.process_attributor.attribute_event(dest_path, check_handles=True)
@@ -303,7 +327,7 @@ class BehavioralDetectionEngine:
                     event_type="ransomware_extension_rename",
                     directory=self.monitored_directory,
                     target_file=os.path.basename(dest_path),
-                    event_count=1,
+                    event_count=ext_count,
                     extension_info=rename_analysis["dest_analysis"],
                     process_info=proc_info
                 )
@@ -314,7 +338,7 @@ class BehavioralDetectionEngine:
                     severity=evaluation["severity"],
                     score=evaluation["score"],
                     category=evaluation["category"],
-                    event_count=1,
+                    event_count=ext_count,
                     action_taken=evaluation["recommended_response"],
                     process_name=proc_info.get("process_name", "unknown"),
                     details=evaluation["explanation"],
@@ -442,6 +466,7 @@ class BehavioralDetectionEngine:
             self._write_window.clear()
             self._delete_window.clear()
             self._create_window.clear()
+            self._suspicious_ext_window.clear()
             self.entropy_tracker.clear()
             self.process_attributor.clear()
             self.risk_engine.clear_cooldowns()

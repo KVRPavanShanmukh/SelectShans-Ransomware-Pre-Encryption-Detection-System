@@ -83,10 +83,17 @@ class EntropyTracker:
         norm_path = os.path.normcase(os.path.abspath(filepath))
         return self._cache.get(norm_path)
 
-    def analyze_modification(self, filepath: str, sample_size: int = DEFAULT_SAMPLE_SIZE) -> Dict[str, any]:
+    def analyze_modification(
+        self,
+        filepath: str,
+        sample_size: int = DEFAULT_SAMPLE_SIZE,
+        entropy_threshold: float = 7.2,
+        delta_threshold: float = 1.8
+    ) -> Dict[str, any]:
         """
         Analyzes modified file entropy against baseline.
         Distinguishes pre-compressed media formats from genuine encryption surges.
+        Uses caller-configured entropy_threshold and delta_threshold.
         """
         norm_path = os.path.normcase(os.path.abspath(filepath))
         current_entropy = calculate_file_entropy(filepath, sample_size=sample_size)
@@ -110,10 +117,10 @@ class EntropyTracker:
 
         if is_natural_compressed:
             explanation = f"File is standard pre-compressed format ({ext}) with baseline high entropy ({current_entropy:.2f})."
-        elif baseline is not None and delta >= 1.8 and current_entropy >= 7.2:
+        elif baseline is not None and delta >= delta_threshold and current_entropy >= entropy_threshold:
             is_surge = True
             explanation = f"High entropy surge detected: {baseline:.2f} -> {current_entropy:.2f} (+{delta:.2f} delta) on format {ext or 'none'}."
-        elif baseline is None and current_entropy >= 7.5:
+        elif baseline is None and current_entropy >= max(entropy_threshold, 7.5):
             is_surge = True
             explanation = f"Elevated entropy ({current_entropy:.2f}) observed on non-compressed format {ext or 'none'}."
         else:
