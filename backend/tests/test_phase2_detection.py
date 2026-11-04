@@ -160,6 +160,22 @@ class TestPhase2Canary(unittest.TestCase):
         self.assertEqual(event["severity"], "CRITICAL")
         self.assertEqual(event["score"], 95)
 
+    def test_16_canary_does_not_delete_preexisting_files(self):
+        # Create a file with canary naming scheme before manager deploys
+        pre_existing = os.path.join(self.temp_dir, f"{CANARY_PREFIX}notes.txt")
+        with open(pre_existing, "w") as f:
+            f.write("Important pre-existing user data that must never be deleted")
+
+        # Deploy canaries
+        deployed = self.canary_mgr.deploy_canaries(self.temp_dir)
+        self.assertNotIn(pre_existing, deployed)
+
+        # Clean up canaries
+        self.canary_mgr.cleanup()
+
+        # The pre-existing file MUST still exist!
+        self.assertTrue(os.path.exists(pre_existing), "Pre-existing file was erroneously deleted by canary cleanup!")
+
 
 class TestPhase2ProcessAttribution(unittest.TestCase):
     def test_09_process_attribution_safety(self):
@@ -248,9 +264,26 @@ class TestPhase2BehavioralEngine(unittest.TestCase):
 
         decision = self.engine.process_file_renamed(src, dest)
         self.assertIsNotNone(decision)
-        self.assertEqual(decision.severity, "CRITICAL")
+        # Isolated rename should be HIGH, not premature CRITICAL
+        self.assertEqual(decision.severity, "HIGH")
         self.assertEqual(decision.event_type, "ransomware_extension_rename")
         self.assertIn("taxes.pdf.locked", decision.target_file)
+
+    def test_13b_multiple_ransomware_extension_renames_escalate_to_critical(self):
+        src1 = os.path.join(self.temp_dir, "doc1.pdf")
+        dest1 = os.path.join(self.temp_dir, "doc1.pdf.locked")
+        open(src1, "w").close()
+        self.engine.process_file_renamed(src1, dest1)
+
+        src2 = os.path.join(self.temp_dir, "doc2.pdf")
+        dest2 = os.path.join(self.temp_dir, "doc2.pdf.locked")
+        open(src2, "w").close()
+        # Ensure cooldown doesn't block by giving different dest
+        decision2 = self.engine.process_file_renamed(src2, dest2)
+        self.assertIsNotNone(decision2)
+        # Multiple renames escalate to CRITICAL
+        self.assertEqual(decision2.severity, "CRITICAL")
+        self.assertGreaterEqual(decision2.score, 85)
 
     def test_14_sliding_window_mass_rename_burst(self):
         # Trigger 4 rapid renames within time window
