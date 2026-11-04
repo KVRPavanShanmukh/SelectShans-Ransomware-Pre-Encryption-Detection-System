@@ -26,13 +26,14 @@ def get_token_expiry_timedelta():
     else:
         return timedelta(minutes=int(expires_in)) # Default to minutes if no suffix
 
-def create_token(user_id, username, email, expiry_timedelta=None):
-    """Create JWT token with configurable expiry or custom duration"""
+def create_token(user_id, username, email, role='user', expiry_timedelta=None):
+    """Create JWT token with configurable expiry or custom duration and role claim"""
     delta = expiry_timedelta if expiry_timedelta is not None else get_token_expiry_timedelta()
     payload = {
         'user_id': user_id,
         'username': username,
         'email': email,
+        'role': role or 'user',
         'iat': datetime.now(timezone.utc),
         'exp': datetime.now(timezone.utc) + delta
     }
@@ -65,7 +66,7 @@ def refresh_token(token):
     if not payload:
         return None
     
-    return create_token(payload['user_id'], payload['username'], payload['email'])
+    return create_token(payload['user_id'], payload['username'], payload['email'], role=payload.get('role', 'user'))
 
 def token_required(f):
     """Decorator to protect endpoints with token validation"""
@@ -77,7 +78,11 @@ def token_required(f):
         if 'Authorization' in request.headers:
             auth_header = request.headers['Authorization']
             try:
-                token = auth_header.split(" ")[1]
+                parts = auth_header.split(" ")
+                if len(parts) > 1:
+                    token = parts[1]
+                else:
+                    token = parts[0]
             except IndexError:
                 return jsonify({'error': 'Invalid token format'}), 401
         

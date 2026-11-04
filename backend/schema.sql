@@ -1,4 +1,4 @@
--- SentinelStream Database Schema
+-- SelectShans Database Schema
 -- Run this in your MySQL client to set up the DB
 -- Database Name: RANSOMWARE
 
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
-    dob VARCHAR(10) DEFAULT '300706',
+    dob VARCHAR(20) DEFAULT '300706',
     sec_q VARCHAR(255),
     sec_a_hash VARCHAR(255),
     role ENUM('admin', 'user') DEFAULT 'user',
@@ -77,9 +77,10 @@ CREATE TABLE IF NOT EXISTS alerts (
     process_name VARCHAR(100) NOT NULL,
     pid INT,
     trigger_reason VARCHAR(255) NOT NULL,
-    action_taken VARCHAR(100) NOT NULL,
+    action_taken VARCHAR(255) NOT NULL,
     resolved BOOLEAN DEFAULT FALSE,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_alerts_resolved (resolved, timestamp)
 );
 
 -- Admin Settings (Log retention, etc)
@@ -112,6 +113,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     full_name VARCHAR(255),
     phone VARCHAR(20),
     organization VARCHAR(255),
+    address VARCHAR(500),
     notification_email VARCHAR(100),
     profile_data JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -127,22 +129,28 @@ CREATE TABLE IF NOT EXISTS detector_logs (
     directory VARCHAR(500),
     event_count INT DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_det_logs_user (user_id, created_at)
 );
 
--- Detector Activities Table
+-- Detector Activities Table (Matches sync-activities schema)
 CREATE TABLE IF NOT EXISTS detector_activities (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT,
     event_type VARCHAR(100) NOT NULL,
-    details TEXT,
-    action_taken VARCHAR(255),
-    process_name VARCHAR(100),
+    directory VARCHAR(500),
+    target_file VARCHAR(255),
+    severity VARCHAR(20) DEFAULT 'MEDIUM',
     score INT DEFAULT 0,
     detector_id VARCHAR(50),
     hostname VARCHAR(100),
+    event_count INT DEFAULT 1,
+    action_taken VARCHAR(255),
+    process_name VARCHAR(100),
+    details TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_det_activities_user (user_id, created_at)
 );
 
 -- System Health Snapshots
@@ -166,7 +174,7 @@ INSERT IGNORE INTO users (username, password_hash, email, sec_q, sec_a_hash, rol
 VALUES (
     'admin',
     'scrypt:32768:8:1$rn95kIq9aE2NbVYS$5c6e29209543965c94b4bb18d7102bc72b88d675b00a74f66ba0c21f7fef9551adec4069eee46e8cc854d1791bf9b16c448dcea09416fffa4abd91d1acd07777', -- password123
-    'admin@sentinelstream.local',
+    'admin@selectshans.local',
     'What is the Event ID for FileCreate in Sysmon?',
     'scrypt:32768:8:1$0ojtnWWc3ZW50wFJ$9a89ebf942268dd75ee79b4dbfda8d53ee81968345a0d39c970cc5991e495e2c5c746101e4e249a59e8c489b6f52601259925ebec0d70aed93cc369861c765a8', -- 11
     'admin'

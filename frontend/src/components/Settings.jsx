@@ -37,9 +37,14 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
         setLoading(true);
         
         try {
+            const token = localStorage.getItem('jwtToken');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             const response = await fetch(`${apiBase}/api/admin/log-retention`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ user_id: userId, days: parseInt(days) })
             });
             
@@ -66,9 +71,14 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
         
         setLoading(true);
         try {
+            const token = localStorage.getItem('jwtToken');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             const response = await fetch(`${apiBase}/api/admin/clear-data`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ user_id: userId })
             });
             

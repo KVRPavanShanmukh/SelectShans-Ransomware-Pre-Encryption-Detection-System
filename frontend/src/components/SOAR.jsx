@@ -10,7 +10,12 @@ const SOAR = ({ userId, apiBase = '' }) => {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/alerts`);
+      const token = localStorage.getItem('jwtToken');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`${apiBase}/api/alerts`, { headers });
       if (res.ok) {
         const data = await res.json();
         setAlerts(data);
@@ -37,9 +42,14 @@ const SOAR = ({ userId, apiBase = '' }) => {
 
   const handleResolve = async (alertId) => {
     try {
+      const token = localStorage.getItem('jwtToken');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const res = await fetch(`${apiBase}/api/alerts/${alertId}/resolve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
       if (res.ok) {
         setMessage('Incident marked as resolved. Security status: CLEAN');

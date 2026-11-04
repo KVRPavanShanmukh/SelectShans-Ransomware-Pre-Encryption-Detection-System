@@ -1,56 +1,60 @@
-import sqlite3
-import urllib.request
-import json
+"""
+Verify Detector Download Integrity
+SelectShans - Ransomware Pre-Encryption Detection System
+"""
 import zipfile
 import io
+import json
 import os
+import sys
 
-db_path = 'd:\\HACK-LEARNATHONS\\LEARNATHON SLOT 3\\FINAL\\PRO\\PRO\\backend\\instance\\selectshans.db'
+# Ensure backend directory is in path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from app import app, create_detector_token
 
-# Just check what's inside the database
-try:
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute("SELECT token FROM users LIMIT 1")
-    row = c.fetchone()
-    conn.close()
-
-    if row:
-        token = row[0]
-        print(f"Found token: {token}")
+def verify_detector_zip():
+    print("Testing detector download endpoint...")
+    client = app.test_client()
+    
+    test_user_id = 1
+    test_email = "admin@selectshans.local"
+    token = create_detector_token(test_user_id, test_email)
+    
+    response = client.get(f'/api/detector-download?token={token}')
+    if response.status_code != 200:
+        print(f"FAIL: Endpoint returned HTTP {response.status_code}")
+        return False
         
-        # Now download the zip
-        url = f"http://127.0.0.1:5000/api/detector-download?token={token}"
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as response:
-            data = response.read()
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(response.data))
+        namelist = zf.namelist()
+        print(f"Downloaded ZIP contains {len(namelist)} items: {namelist}")
+        
+        required_files = ["config.json", "detector.py", "requirements.txt", "run.bat"]
+        missing = [f for f in required_files if f not in namelist]
+        
+        if missing:
+            print(f"FAIL: Missing required detector package files: {missing}")
+            return False
             
-            with zipfile.ZipFile(io.BytesIO(data)) as z:
-                print(f"Downloaded ZIP contains {len(z.namelist())} files.")
-                
-                # Check for old python files
-                forbidden = ["detector.py", "requirements.txt", "run.bat"]
-                found_forbidden = [f for f in forbidden if f in z.namelist()]
-                if found_forbidden:
-                    print(f"FAIL: Found forbidden files: {found_forbidden}")
-                else:
-                    print("PASS: No old Python files found.")
-                
-                # Check for .NET GUI files
-                if "SelectShans.GUI.exe" in z.namelist():
-                    print("PASS: Found SelectShans.GUI.exe")
-                else:
-                    print("FAIL: Missing SelectShans.GUI.exe")
-                    
-                # Read appsettings.json
-                if "appsettings.json" in z.namelist():
-                    appsettings_data = z.read("appsettings.json")
-                    settings = json.loads(appsettings_data)
-                    print("appsettings.json:", json.dumps(settings, indent=2))
-                else:
-                    print("FAIL: Missing appsettings.json")
-                    
-    else:
-        print("No users found.")
-except Exception as e:
-    print(f"Error: {e}")
+        # Verify config.json content
+        config_data = json.loads(zf.read("config.json"))
+        print(f"PASS: config.json parsed successfully: token={config_data.get('token')[:15]}... email={config_data.get('email')}")
+        
+        # Verify detector.py content
+        detector_code = zf.read("detector.py").decode('utf-8')
+        if "FolderMonitor" in detector_code and "FileSystemEventHandler" in detector_code:
+            print("PASS: detector.py contains valid file monitoring logic.")
+        else:
+            print("FAIL: detector.py appears corrupted or incomplete.")
+            return False
+            
+        print("ALL DETECTOR DOWNLOAD CHECKS PASSED.")
+        return True
+    except Exception as e:
+        print(f"FAIL: Error inspecting downloaded ZIP: {e}")
+        return False
+
+if __name__ == "__main__":
+    success = verify_detector_zip()
+    sys.exit(0 if success else 1)

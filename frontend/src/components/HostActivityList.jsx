@@ -9,7 +9,12 @@ const HostActivityList = ({ userId, apiBase = '' }) => {
   const fetchActivities = async () => {
     try {
       const storedUserId = localStorage.getItem('userId') || userId || '';
-      const response = await fetch(`${apiBase}/api/detector/activities?user_id=${storedUserId}`);
+      const token = localStorage.getItem('jwtToken');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch(`${apiBase}/api/detector/activities?user_id=${storedUserId}`, { headers });
       if (response.ok) {
         const data = await response.json();
         setActivities(Array.isArray(data) ? data : []);

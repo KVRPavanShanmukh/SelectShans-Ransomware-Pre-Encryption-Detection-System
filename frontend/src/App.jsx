@@ -37,6 +37,7 @@ function App() {
   const [adminTab, setAdminTab] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminViewMode, setAdminViewMode] = useState('admin'); // 'admin' or 'threat_console'
   const [isSignup, setIsSignup] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [logsUploaded, setLogsUploaded] = useState(false);
@@ -75,6 +76,10 @@ function App() {
       setIsAuthenticated(true);
       if (storedRole === 'admin') {
         setIsAdmin(true);
+        setAdminViewMode('admin');
+      } else {
+        setIsAdmin(false);
+        setAdminViewMode('threat_console');
       }
       startTokenRefreshTimer(storedToken);
     }
@@ -109,15 +114,23 @@ function App() {
     setTokenRefreshInterval(refreshInterval);
   };
 
-  const handleLogin = (userId, token) => {
+  const handleLogin = (userId, token, role) => {
     localStorage.setItem('jwtToken', token);
-    localStorage.setItem('userId', userId);
+    localStorage.setItem('userId', String(userId));
+    const assignedRole = role || localStorage.getItem('user_role') || 'user';
+    localStorage.setItem('user_role', assignedRole);
     setUserId(userId);
     setJwtToken(token);
     setIsAuthenticated(true);
-    if (localStorage.getItem('user_role') === 'admin') {
+    if (assignedRole === 'admin') {
       setIsAdmin(true);
+      setAdminViewMode('admin');
+    } else {
+      setIsAdmin(false);
+      setAdminViewMode('threat_console');
     }
+    setShowAdminLogin(false);
+    setIsSignup(false);
     startTokenRefreshTimer(token);
   };
 
@@ -125,11 +138,13 @@ function App() {
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('userId');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('detector_token');
     setJwtToken(null);
     setBetaToken(null);
     setUserId(null);
     setIsAuthenticated(false);
     setIsAdmin(false);
+    setAdminViewMode('admin');
     if (tokenRefreshInterval) {
       clearInterval(tokenRefreshInterval);
     }
@@ -167,7 +182,7 @@ function App() {
     return <Signup onSignupSuccess={() => setIsSignup(false)} onSwitchToLogin={() => setIsSignup(false)} />;
   }
 
-  if (isAdmin) {
+  if (isAdmin && adminViewMode === 'admin') {
     return (
       <div className="app-container">
         <main className="content-area" style={{ marginLeft: 0 }}>
@@ -175,12 +190,20 @@ function App() {
             <div className="search-bar">
               <h2>SelectShans SOC Admin Control</h2>
             </div>
-            <button 
-              onClick={handleLogout}
-              style={{ background: '#ff4d4d', color: '#1a202c', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              Sign Out Admin
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => setAdminViewMode('threat_console')}
+                style={{ background: 'rgba(0,124,195,0.2)', border: '1px solid #007CC3', color: '#007CC3', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+              >
+                Switch to Threat Console
+              </button>
+              <button 
+                onClick={handleLogout}
+                style={{ background: '#ff4d4d', color: '#1a202c', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+              >
+                Sign Out Admin
+              </button>
+            </div>
           </header>
           <div className="main-view">
             <AdminDashboard jwtToken={jwtToken} />
@@ -199,6 +222,16 @@ function App() {
           <div className="search-bar">
             <input type="text" placeholder="Search logs, hashes, PIDs, paths..." />
           </div>
+          
+          {isAdmin && (
+            <button
+              onClick={() => setAdminViewMode('admin')}
+              style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#ef4444', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem' }}
+            >
+              ⚙ SOC Admin Console
+            </button>
+          )}
+
           <SessionManager 
             jwtToken={jwtToken} 
             onLogout={handleLogout} 
@@ -208,12 +241,12 @@ function App() {
             }} 
           />
           <div className="user-profile" style={{ position: 'relative' }}>
-            <span className="status-badge">Admin: Active</span>
+            <span className="status-badge">{isAdmin ? 'Admin: Active' : 'User: Active'}</span>
             <div
               className="avatar"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
-              SOC-Admin
+              {isAdmin ? 'SOC-Admin' : 'Operator'}
             </div>
 
             {showProfileMenu && (
@@ -242,17 +275,19 @@ function App() {
                 >
                   Profile Settings
                 </div>
-                <div
-                  style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', borderBottom: '1px solid rgba(0,255,65,0.1)' }}
-                  onClick={() => {
-                    handleAdminNavigation('audit-log');
-                    setShowProfileMenu(false);
-                  }}
-                  onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
-                  onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
-                >
-                  View Audit Log
-                </div>
+                {isAdmin && (
+                  <div
+                    style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', borderBottom: '1px solid rgba(0,255,65,0.1)' }}
+                    onClick={() => {
+                      handleAdminNavigation('audit-log');
+                      setShowProfileMenu(false);
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = 'rgba(0,255,65,0.1)'; e.target.style.color = 'var(--primary-bright)'; }}
+                    onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-secondary)'; }}
+                  >
+                    View Audit Log
+                  </div>
+                )}
               </div>
             )}
           </div>

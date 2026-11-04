@@ -60,8 +60,8 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
 
       if (response.ok && data.pending) {
         setIdentifier(data.identifier);
-        if (data.otp) setOtp(data.otp);
-        if (data.psk) setPsk(data.psk);
+        if (data.otp || data.dev_otp) setOtp(data.otp || data.dev_otp);
+        if (data.psk || data.dev_psk) setPsk(data.psk || data.dev_psk);
         setStep(1);
         setResendCooldown(30);
       } else {
@@ -95,12 +95,15 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
       const data = await response.json();
 
       if (response.ok) {
+        const assignedRole = data.role || 'user';
         // Store tokens
-        localStorage.setItem("detector_token", data.detector_token);
-        localStorage.setItem("user_role", data.role);
+        localStorage.setItem("detector_token", data.detector_token || "");
+        localStorage.setItem("user_role", assignedRole);
+        localStorage.setItem("userId", String(data.user_id));
+        localStorage.setItem("jwtToken", data.token);
         
-        // Call onLogin with userId and JWT token
-        onLogin(data.user_id, data.token);
+        // Call onLogin with userId, token, and role
+        onLogin(data.user_id, data.token, assignedRole);
       } else {
         setError(data.error || 'Verification failed');
       }
@@ -111,10 +114,6 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
 
     setLoading(false);
   };
-
-
-
-
 
   return (
     <div className="login-overlay">
@@ -174,7 +173,6 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Processing...' : 'Send OTP & PSK'}
             </button>
-            
 
           </form>
         )}

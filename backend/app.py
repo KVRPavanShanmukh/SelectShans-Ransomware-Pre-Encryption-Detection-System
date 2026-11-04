@@ -24,12 +24,21 @@ from email import encoders
 from dotenv import load_dotenv
 load_dotenv()
 
-APP_ENV = os.getenv("APP_ENV", "production")
+APP_ENV = os.getenv("APP_ENV", "development")
 
-REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
-for var in REQUIRED_ENV_VARS:
-    if not os.getenv(var):
-        raise RuntimeError(f"{var} environment variable is required")
+if APP_ENV.lower() == "production":
+    REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
+    for var in REQUIRED_ENV_VARS:
+        if not os.getenv(var):
+            raise RuntimeError(f"{var} environment variable is required in production")
+else:
+    # Safe development fallbacks for local testing and CI/CD
+    if not os.getenv("JWT_SECRET"):
+        os.environ["JWT_SECRET"] = "selectshans_dev_jwt_secret_key_2026_test"
+    if not os.getenv("DETECTOR_SECRET"):
+        os.environ["DETECTOR_SECRET"] = "selectshans_dev_detector_secret_key_2026_test"
+    if not os.getenv("DB_PASSWORD"):
+        os.environ["DB_PASSWORD"] = ""
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -73,7 +82,10 @@ print("Starting SelectShans Backend...")
 @app.errorhandler(Exception)
 def handle_exception(e):
     import traceback
-    return str(traceback.format_exc()), 500
+    print("Unhandled Exception:", traceback.format_exc())
+    if APP_ENV.lower() != "production":
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+    return jsonify({"error": "An internal server error occurred."}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -96,34 +108,52 @@ dbconf = {
     "password": db_pass
 }
 
-# Auto-create database if it doesn't exist (skip in production/vercel)
-is_production = APP_ENV.lower() == "production"
-if not (is_vercel or is_production):
-    try:
-        print("Pre-connecting to MySQL to verify/create database...")
-        import mysql.connector
-        temp_conn = mysql.connector.connect(**dbconf)
-        temp_cursor = temp_conn.cursor()
-        temp_cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-        temp_conn.commit()
-        temp_cursor.close()
-        temp_conn.close()
-        print(f"Database '{db_name}' verified/created.")
-    except Exception as db_init_err:
-        print("Failed to auto-create database:", db_init_err)
-
 # Add database name to configuration for the pool
 dbconf["database"] = db_name
 
-pool = pooling.MySQLConnectionPool(
-    pool_name="mypool",
-    pool_size=1 if is_vercel else 5,
-    **dbconf
-)
+class ResilientMySQLPool:
+    def __init__(self, config, is_vercel_env=False):
+        self.config = config
+        self.is_vercel = is_vercel_env
+        self._pool = None
+        self._init_pool()
 
-print("MySQL pool ready.")
+    def _init_pool(self):
+        try:
+            # Pre-create database if not production
+            if not (self.is_vercel or APP_ENV.lower() == "production"):
+                try:
+                    import mysql.connector
+                    pre_conf = {k: v for k, v in self.config.items() if k != "database"}
+                    t_conn = mysql.connector.connect(**pre_conf)
+                    t_cur = t_conn.cursor()
+                    t_cur.execute(f"CREATE DATABASE IF NOT EXISTS `{self.config['database']}`")
+                    t_conn.commit()
+                    t_cur.close()
+                    t_conn.close()
+                except Exception as pre_err:
+                    print("[WARN] Pre-creating database skipped:", pre_err)
 
-def init_db(pool):
+            self._pool = pooling.MySQLConnectionPool(
+                pool_name="mypool",
+                pool_size=1 if self.is_vercel else 5,
+                **self.config
+            )
+            print("MySQL pool ready.")
+        except Exception as e:
+            print(f"[WARN] MySQL connection pool deferred (MySQL offline or unreachable: {e})")
+            self._pool = None
+
+    def get_connection(self):
+        if self._pool is None:
+            self._init_pool()
+        if self._pool is None:
+            raise RuntimeError("Database connection unavailable. Please ensure MySQL is running on port 3306.")
+        return self._pool.get_connection()
+
+pool = ResilientMySQLPool(dbconf, is_vercel_env=is_vercel)
+
+def init_db(db_pool):
     print("Initializing database schema...")
     schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
     if not os.path.exists(schema_path):
@@ -131,47 +161,27 @@ def init_db(pool):
         return
         
     try:
+        conn = db_pool.get_connection()
+    except Exception as conn_err:
+        print(f"[WARN] MySQL not reachable for schema initialization at boot: {conn_err}")
+        return
+
+    try:
         with open(schema_path, "r", encoding="utf-8") as f:
             schema_sql = f.read()
             
         statements = []
         current_stmt = []
         for line in schema_sql.splitlines():
-            if line.strip().startswith("--") or line.strip().startswith("#"):
-                continue
-            if not line.strip():
+            line_str = line.strip()
+            if line_str.startswith("--") or line_str.startswith("#") or not line_str:
                 continue
             current_stmt.append(line)
-            if line.strip().endswith(";"):
+            if line_str.endswith(";"):
                 statements.append(" ".join(current_stmt))
                 current_stmt = []
                 
-        # Make sure detector_logs exists
-        statements.append("""
-            CREATE TABLE IF NOT EXISTS detector_logs (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT,
-                event_type VARCHAR(100) NOT NULL,
-                directory VARCHAR(500),
-                event_count INT DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        statements.append("""
-            CREATE TABLE IF NOT EXISTS detector_activities (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT,
-                event_type VARCHAR(100) NOT NULL,
-                details TEXT,
-                action_taken VARCHAR(255),
-                process_name VARCHAR(100),
-                score INT DEFAULT 0,
-                detector_id VARCHAR(50),
-                hostname VARCHAR(100),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-
+        # Schema migration ALTER statements to guarantee missing columns are added safely
         alter_statements = [
             "ALTER TABLE users ADD COLUMN role ENUM('admin', 'user') DEFAULT 'user';",
             "ALTER TABLE users ADD COLUMN dob VARCHAR(20) DEFAULT '300706';",
@@ -179,10 +189,15 @@ def init_db(pool):
             "ALTER TABLE users ADD COLUMN shikikan_requested BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE users ADD COLUMN is_online BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE users ADD COLUMN last_active DATETIME;",
-            "ALTER TABLE user_profiles ADD COLUMN address VARCHAR(500);"
+            "ALTER TABLE user_profiles ADD COLUMN address VARCHAR(500);",
+            "ALTER TABLE detector_activities ADD COLUMN directory VARCHAR(500);",
+            "ALTER TABLE detector_activities ADD COLUMN target_file VARCHAR(255);",
+            "ALTER TABLE detector_activities ADD COLUMN severity VARCHAR(20) DEFAULT 'MEDIUM';",
+            "ALTER TABLE detector_activities ADD COLUMN event_count INT DEFAULT 1;",
+            "ALTER TABLE detector_activities ADD COLUMN details TEXT;",
+            "ALTER TABLE alerts MODIFY COLUMN action_taken VARCHAR(255) NOT NULL;"
         ]
         
-        conn = pool.get_connection()
         cursor = conn.cursor()
         for stmt in statements:
             if stmt.strip():
@@ -354,13 +369,13 @@ def signup():
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
+    data = request.json or {}
 
     conn = pool.get_connection()
     try:
         cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute(
-            "SELECT id, username, email, password_hash, dob FROM users WHERE username=%s OR email=%s",
+            "SELECT id, username, email, password_hash, dob, role FROM users WHERE username=%s OR email=%s",
             (data.get("username"), data.get("username"))
         )
         users = cursor.fetchall()
@@ -385,6 +400,7 @@ def login():
 
     user = valid_user
     email = user["email"]
+    user_role = user.get("role") or "user"
     otp = ''.join(secrets.choice("0123456789") for _ in range(6))
     psk = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
 
@@ -394,6 +410,7 @@ def login():
         "user_id": user["id"],
         "username": user["username"],
         "email": email,
+        "role": user_role,
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY)
     }
 
@@ -489,27 +506,41 @@ def login():
         html_body=html_body
     )
     if not success:
-        return jsonify({"error": "Failed to send OTP email. Please verify SMTP configuration."}), 500
+        if APP_ENV.lower() == "production":
+            return jsonify({"error": "Failed to send OTP email. Please verify SMTP configuration."}), 503
+        else:
+            print("\n=======================================================")
+            print(f" [DEV FALLBACK] SMTP offline. Verification Code Logged:")
+            print(f" Identifier : {email}")
+            print(f" OTP        : {otp}")
+            print(f" PSK        : {psk}")
+            print("=======================================================\n")
+            return jsonify({
+                "pending": True,
+                "identifier": email,
+                "dev_otp": otp,
+                "dev_psk": psk,
+                "notice": "Development mode: SMTP offline. OTP auto-filled or check terminal."
+            }), 200
 
     return jsonify({"pending": True, "identifier": email}), 200
 
 
 @app.route('/api/login/verify', methods=['POST'])
 def verify():
-    data = request.json
+    data = request.json or {}
     identifier = data.get("identifier", "").lower()
     pending = _pending_logins.get(identifier)
 
     if not pending:
-        return jsonify({"error": "Invalid or expired"}), 401
+        return jsonify({"error": "Invalid or expired session"}), 401
 
     if pending["otp"] != data.get("otp") or pending["psk"] != data.get("psk"):
         return jsonify({"error": "Invalid OTP/PSK"}), 401
 
-    # Log the successful login (Skipping login_sessions since it's not in schema.sql)
-
+    role = pending.get("role", "user")
     detector_token = create_detector_token(pending["user_id"], pending["email"])
-    jwt_token = create_token(pending["user_id"], pending["username"], pending["email"])
+    jwt_token = create_token(pending["user_id"], pending["username"], pending["email"], role=role)
     del _pending_logins[identifier]
 
     return jsonify({
@@ -519,6 +550,7 @@ def verify():
         "user_id": pending["user_id"],
         "username": pending["username"],
         "email": pending["email"],
+        "role": role,
         "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
 
@@ -732,42 +764,40 @@ def detector_download():
     info = verify_detector_token(token)
 
     if not info:
-        return jsonify({"error": "Invalid token"}), 401
+        return jsonify({"error": "Invalid or expired detector token"}), 401
 
     buffer = io.BytesIO()
-
-    # The new WPF endpoint is published here
-    dotnet_publish_dir = Path(__file__).resolve().parent / "endpoint_dotnet_publish"
+    detector_pkg_dir = Path(__file__).resolve().parent / "detector_package"
+    backend_url = os.getenv("BACKEND_API_URL", request.url_root.rstrip("/"))
 
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        backend_url = os.getenv("BACKEND_API_URL", request.url_root.rstrip("/"))
-        
-        # Read the existing appsettings.json from the published directory (if it exists)
-        # to ensure we keep other defaults like thresholds.
-        appsettings_path = dotnet_publish_dir / "appsettings.json"
-        if appsettings_path.exists():
-            with open(appsettings_path, "r", encoding="utf-8") as f:
-                settings = json.load(f)
+        # Dynamic user-scoped config
+        client_config = {
+            "api_base": backend_url,
+            "user_id": info["user_id"],
+            "token": token,
+            "email": info["email"]
+        }
+        zf.writestr("config.json", json.dumps(client_config, indent=2))
+
+        # Include detector.py
+        detector_py = detector_pkg_dir / "detector.py"
+        if detector_py.exists():
+            zf.write(detector_py, arcname="detector.py")
+
+        # Include requirements.txt
+        req_txt = detector_pkg_dir / "requirements.txt"
+        if req_txt.exists():
+            zf.write(req_txt, arcname="requirements.txt")
         else:
-            settings = {"EndpointOptions": {}}
+            zf.writestr("requirements.txt", "watchdog>=4.0.0\nrequests>=2.31.0\n")
 
-        if "EndpointOptions" not in settings:
-            settings["EndpointOptions"] = {}
-            
-        settings["EndpointOptions"]["BackendApiUrl"] = backend_url
-        settings["EndpointOptions"]["DetectorToken"] = token
-        
-        # Write the modified appsettings.json to the zip
-        zf.writestr("appsettings.json", json.dumps(settings, indent=2))
-
-        # Zip all files from the publish directory, EXCEPT appsettings.json since we just wrote it
-        if dotnet_publish_dir.exists():
-            for file in dotnet_publish_dir.rglob("*"):
-                if file.is_file() and file.name != "appsettings.json":
-                    # Filter out test binaries, PDBs, etc if present (though a clean publish shouldn't have test projects)
-                    if file.suffix.lower() == ".pdb":
-                        continue
-                    zf.write(file, file.relative_to(dotnet_publish_dir))
+        # Include run.bat
+        run_bat = detector_pkg_dir / "run.bat"
+        if run_bat.exists():
+            zf.write(run_bat, arcname="run.bat")
+        else:
+            zf.writestr("run.bat", "@echo off\r\necho Starting SelectShans FolderGuard...\r\npython detector.py\r\npause\r\n")
 
     buffer.seek(0)
 
@@ -775,7 +805,7 @@ def detector_download():
         buffer,
         mimetype="application/zip",
         as_attachment=True,
-        download_name="SelectShans-Endpoint.zip"
+        download_name="SelectShans-FolderGuard.zip"
     )
 
 
@@ -810,7 +840,7 @@ def detector_log():
     if event_type == "mass_rename":
         cursor.execute("""
             INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
-            VALUES ('CRITICAL', 'FolderGuard Agent', %s, %s, 'Process Suspended & Email Sent via Nodemailer', FALSE)
+            VALUES ('CRITICAL', 'FolderGuard Agent', %s, %s, 'Process Flagged & Security Alert Dispatched', FALSE)
         """, (count, f"Mass rename in {directory}"))
 
     conn.commit()
@@ -1192,8 +1222,8 @@ def generate_pdf_report(user_id, user_email):
     threat_level = "CRITICAL" if anomaly_score > 70 else "MEDIUM" if anomaly_score > 40 else "LOW"
 
     # Create Chart with matplotlib
-    event_types = [r["event_type"] for r in rows]
-    counts = [r["count"] for r in rows]
+    event_types = [r.get("event_type", "event") for r in rows if isinstance(r, dict)] or ["No Events"]
+    counts = [r.get("count", 0) for r in rows if isinstance(r, dict)] or [0]
 
     plt.figure(figsize=(6, 3.2), dpi=150)
     colors_list = ['#007CC3', '#e11d48', '#f59e0b', '#10b981', '#6366f1']
@@ -1205,11 +1235,14 @@ def generate_pdf_report(user_id, user_email):
     plt.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
-    chart_path = f"/tmp/chart_{user_id}_{secrets.token_hex(4)}.png"
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    os.makedirs(temp_dir, exist_ok=True)
+    chart_path = os.path.join(temp_dir, f"chart_{user_id}_{secrets.token_hex(4)}.png")
     plt.savefig(chart_path)
-    plt.close()
+    plt.close('all')
 
-    pdf_path = f"/tmp/SelectShans_Security_Report_{user_id}.pdf"
+    pdf_path = os.path.join(temp_dir, f"SelectShans_Security_Report_{user_id}.pdf")
     doc = SimpleDocTemplate(
         pdf_path,
         pagesize=A4,
@@ -1298,8 +1331,11 @@ def generate_pdf_report(user_id, user_email):
     elements.append(Paragraph("3. FolderGuard Telemetry Event Log", section_heading))
     telemetry_table_data = [["Event Category", "Occurrences", "Last Detected Timestamp"]]
     for r in rows:
-        ts_str = r["last_seen"].strftime('%Y-%m-%d %H:%M:%S') if isinstance(r["last_seen"], datetime) else str(r["last_seen"])
-        telemetry_table_data.append([str(r["event_type"]), str(r["count"]), ts_str])
+        last_seen = r.get("last_seen") if isinstance(r, dict) else None
+        ts_str = last_seen.strftime('%Y-%m-%d %H:%M:%S') if isinstance(last_seen, datetime) else str(last_seen or "Recent")
+        ev_type = str(r.get("event_type", "Event") if isinstance(r, dict) else "Event")
+        cnt_val = str(r.get("count", 1) if isinstance(r, dict) else 1)
+        telemetry_table_data.append([ev_type, cnt_val, ts_str])
 
     t_telemetry = Table(telemetry_table_data, colWidths=[180, 120, 220])
     t_telemetry.setStyle(TableStyle([
@@ -1371,32 +1407,28 @@ def get_security_report_pdf():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
-        role_user = cursor.fetchone()
-        if not role_user or role_user.get('role') != 'admin':
-            return jsonify({"error": "Admin access required"}), 403
-    except Exception as e:
+        cursor.execute("SELECT id, email, role FROM users WHERE id = %s", (user_id,))
+        current_user = cursor.fetchone()
+        is_admin = current_user and current_user.get('role') == 'admin'
+        
+        # Security check: Non-admins cannot access general admin reports or other users' reports
+        if not is_admin:
+            if not target_user_id or target_user_id != user_id:
+                return jsonify({"error": "Admin access required"}), 403
+            
+        target_id_to_fetch = target_user_id or user_id
+        cursor.execute("SELECT id, email FROM users WHERE id = %s", (target_id_to_fetch,))
+        user = cursor.fetchone()
+    finally:
         cursor.close()
         conn.close()
-        return jsonify({"error": str(e)}), 500
-    user = None
-    if target_user_id:
-        cursor.execute("SELECT id, email FROM users WHERE id = %s", (target_user_id,))
-        user = cursor.fetchone()
-        
-    if not user:
-        cursor.execute("SELECT id, email FROM users ORDER BY id ASC LIMIT 1")
-        user = cursor.fetchone()
-        
-    cursor.close()
-    conn.close()
 
     if user:
         u_id = user["id"]
         u_email = user["email"]
     else:
-        u_id = target_user_id or 1
-        u_email = "admin@selectshans.sec"
+        u_id = user_id
+        u_email = g.user.get("email", "user@selectshans.sec")
 
     try:
         pdf_path = generate_pdf_report(u_id, u_email)
@@ -1432,10 +1464,6 @@ def get_realtime_stats():
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
-        role_user = cursor.fetchone()
-        if not role_user or role_user.get('role') != 'admin':
-            return jsonify({"error": "Admin access required"}), 403
         # Calculate anomaly score based on unresolved critical alerts
         cursor.execute("SELECT COUNT(*) as count FROM alerts WHERE resolved = FALSE")
         unresolved_alerts = cursor.fetchone()["count"]
@@ -1782,10 +1810,6 @@ def get_alerts():
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
-        role_user = cursor.fetchone()
-        if not role_user or role_user.get('role') != 'admin':
-            return jsonify({"error": "Admin access required"}), 403
             
         cursor.execute("SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 100")
         alerts = cursor.fetchall()
@@ -1808,10 +1832,6 @@ def resolve_alert(alert_id):
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
-        role_user = cursor.fetchone()
-        if not role_user or role_user.get('role') != 'admin':
-            return jsonify({"error": "Admin access required"}), 403
             
         cursor.execute("UPDATE alerts SET resolved = TRUE WHERE id = %s", (alert_id,))
         conn.commit()
