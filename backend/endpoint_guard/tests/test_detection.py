@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 
 # Mock config before importing components
 import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 mock_config = MagicMock()
 mock_config.get.side_effect = lambda k, d=None: 15 if "time_window" in k else (10 if "threshold" in k else d)
 sys.modules['config'] = MagicMock(config_manager=mock_config)

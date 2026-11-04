@@ -160,15 +160,28 @@ const HostActivityList = ({ userId, apiBase = '' }) => {
                 return (
                   <tr key={act.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: idx % 2 === 0 ? 'transparent' : 'rgba(15, 23, 42, 0.4)' }}>
                     <td style={{ padding: '8px 10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{formatTime(act.created_at)}</td>
-                    <td style={{ padding: '8px 10px', color: '#00FF41', fontWeight: 700 }}>{formatEventName(act.event_type)}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <div style={{ color: '#00FF41', fontWeight: 700 }}>{formatEventName(act.event_type)}</div>
+                      <div style={{ color: '#64748b', fontSize: '0.7rem' }}>Proc: {act.process_name || 'unknown'}</div>
+                    </td>
                     <td style={{ padding: '8px 10px', color: '#e2e8f0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Folder size={14} style={{ color: '#007CC3', flexShrink: 0 }} />
                         <span>{act.directory} {act.target_file ? `(${act.target_file})` : ''}</span>
                       </div>
+                      {act.details && (
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 4, maxWidth: 350, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={act.details}>
+                          {act.details}
+                        </div>
+                      )}
                     </td>
-                    <td style={{ padding: '8px 10px' }}>{getSeverityBadge(act.severity)}</td>
-                    <td style={{ padding: '8px 10px', color: '#cbd5e1' }}>{act.action_taken || 'Marked & Logged'}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {getSeverityBadge(act.severity)}
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>{act.score || 0}/100</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '8px 10px', color: '#cbd5e1' }}>{act.action_taken || 'Recommended: Isolate Host'}</td>
                     <td style={{ padding: '8px 10px' }}>
                       {isCritical ? (
                         <span style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
