@@ -312,11 +312,16 @@ def send_email_safe(to_email, subject, body, attachment_path=None, html_body=Non
         return True
     except Exception as e:
         print(f"SMTP execution failed: {e}")
-        print("\n=== SIMULATED EMAIL FALLBACK ===")
-        print(f"To: {to_email}")
-        print(f"Subject: {subject}")
-        print(f"Body:\n{body}")
-        print("================================\n")
+        try:
+            safe_subj = str(subject).encode('ascii', 'replace').decode('ascii')
+            safe_body = str(body).encode('ascii', 'replace').decode('ascii')
+            print("\n=== SIMULATED EMAIL FALLBACK ===")
+            print(f"To: {to_email}")
+            print(f"Subject: {safe_subj}")
+            print(f"Body:\n{safe_body}")
+            print("================================\n")
+        except Exception:
+            pass
         return False
 
 # =====================================================
@@ -780,10 +785,9 @@ def detector_download():
         }
         zf.writestr("config.json", json.dumps(client_config, indent=2))
 
-        # Include detector.py
-        detector_py = detector_pkg_dir / "detector.py"
-        if detector_py.exists():
-            zf.write(detector_py, arcname="detector.py")
+        # Include all Python modules from detector_package
+        for py_file in detector_pkg_dir.glob("*.py"):
+            zf.write(py_file, arcname=py_file.name)
 
         # Include requirements.txt
         req_txt = detector_pkg_dir / "requirements.txt"
@@ -916,22 +920,26 @@ def detector_sync_activities():
             event_count = act.get("event_count", 1)
             action_taken = act.get("action_taken", "Marked & Logged by FolderGuard")
             process_name = act.get("process_name", "FolderGuard Agent")
+            details = act.get("details", "")
 
             cursor.execute("""
-                INSERT INTO detector_activities (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name))
+                INSERT INTO detector_activities (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details))
             
             synced_count += 1
             
-            if severity in ["HIGH", "CRITICAL"] or event_type in ["mass_rename", "canary_breach", "entropy_surge"]:
+            if severity in ["HIGH", "CRITICAL"] or event_type in ["mass_rename", "canary_breach", "canary_tamper", "entropy_surge", "ransomware_extension_rename"]:
                 critical_found = True
                 last_event_msg = f"{event_type.replace('_', ' ').title()} in {directory} ({target_file or 'Multiple files'})"
+                trigger_reason = f"Anomalous behavior: {last_event_msg}"
+                if details:
+                    trigger_reason = f"{last_event_msg} | {details[:160]}"
                 
                 cursor.execute("""
                     INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
                     VALUES (%s, %s, %s, %s, %s, FALSE)
-                """, (severity, process_name, event_count, f"Anomalous behavior: {last_event_msg}", action_taken))
+                """, (severity, process_name, event_count, trigger_reason, action_taken))
 
         conn.commit()
     except Exception as e:
@@ -947,7 +955,7 @@ def detector_sync_activities():
         print(f"Triggering website email notification to {user_email} for synced anomalous activity...")
         send_email_safe(
             user_email,
-            "🚨 SelectShans ALERT: Anomalous Activity Detected in Monitored Folder",
+            "[ALERT] SelectShans: Anomalous Activity Detected in Monitored Folder",
             f"""
 SelectShans FolderGuard Agent detected anomalous activities on your host machine.
 
@@ -977,7 +985,7 @@ def get_detector_activities():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, created_at
+            SELECT id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details, created_at
             FROM detector_activities
             WHERE user_id = %s OR user_id IS NULL
             ORDER BY created_at DESC LIMIT 100

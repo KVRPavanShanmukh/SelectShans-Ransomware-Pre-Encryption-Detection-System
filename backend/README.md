@@ -1,7 +1,7 @@
 # 🛡️ SelectShans – Ransomware Pre-Encryption Detection System
-## Backend Architecture & Technical Guide
+## Backend Architecture & Technical Guide (Phase 2)
 
-SelectShans is a full-stack cybersecurity defense system designed to detect and intercept ransomware attacks before catastrophic mass-encryption occurs. It combines real-time filesystem heuristics (Shannon entropy scoring, rapid write/modification thresholds, honeypot baiting), an automated endpoint detector package, and a centralized Security Operations Center (SOC) dashboard.
+SelectShans is a full-stack cybersecurity defense system designed to detect and alert on anomalous ransomware-like behavior early before widespread mass encryption occurs. It combines real-time filesystem heuristics (Shannon entropy scoring, rapid write/modification thresholds, mass renames, honeypot baiting), an automated endpoint detector package, and a centralized Security Operations Center (SOC) dashboard.
 
 ---
 
@@ -18,7 +18,7 @@ SelectShans is a full-stack cybersecurity defense system designed to detect and 
                                                v
 +-------------------------------+       +-----------------------------+
 |    SelectShans FolderGuard    | ----> |     Flask Backend Server    |
-|  (Endpoint Python Watchdog)   | HTTP  |   (app.py / admin_routes)   |
+|   (Modular Behavioral Agent)  | HTTP  |   (app.py / admin_routes)   |
 +-------------------------------+ Logs  +--------------+--------------+
                                                        |
                                                MySQL Connector
@@ -35,12 +35,20 @@ SelectShans is a full-stack cybersecurity defense system designed to detect and 
 - **Reporting Engine:** ReportLab 4.0+ for high-fidelity PDF security audit generation.
 - **Telemetry Visualizations:** Matplotlib with headless Agg rendering.
 - **Database:** MySQL 8.0+ via `mysql-connector-python` with connection pooling.
-- **Endpoint Agent:** Python Watchdog filesystem monitor with Shannon entropy calculation (`math.log2`).
+- **Endpoint Agent:** Modular Python FolderGuard agent (`watchdog`, `psutil`, `requests`).
 - **Frontend:** React 19, Vite, Recharts, Lucide Icons.
 
 ---
 
-## 📂 Backend File Structure
+## 📂 Project Structure & Authoritative Agent Decision
+
+### Architectural Decision: Authoritative Detection Engine
+The project previously contained three separate, disparate detection concepts:
+1. `backend/detector_package/` (Python Watchdog downloadable agent)
+2. `backend/endpoint_guard/` (Separate Python service with hardcoded ProgramData permissions)
+3. `backend/endpoint_dotnet/` (.NET 8 solution requiring external runtime)
+
+**Decision:** The **Python FolderGuard agent in `backend/detector_package/`** is established as the **sole authoritative production endpoint agent**. It is the exact package downloaded dynamically by users from the dashboard, runs cross-platform without requiring external runtimes, and communicates natively with the Flask backend via verified token authentication. The best modular capabilities from `endpoint_guard` and `endpoint_dotnet` (entropy analysis, sliding-window aggregation, canary decoys, process attribution, risk scoring) were consolidated directly into `detector_package/`.
 
 ```
 backend/
@@ -52,95 +60,101 @@ backend/
 ├── fix_env.py              # Environment configuration repair utility
 ├── requirements.txt        # Verified Python dependencies (Flask, PyJWT, ReportLab, psutil, etc.)
 ├── .env.example            # Environment configuration template
-└── detector_package/       # Distributable endpoint agent bundled dynamically into ZIP
-    ├── detector.py         # Watchdog agent with entropy analysis and telemetry sync
-    ├── config.json         # Agent configuration template
+├── tests/                  # Complete automated test suite (57 unit, integration, and perf tests)
+└── detector_package/       # Authoritative endpoint agent bundled dynamically into ZIP
+    ├── detector.py         # Main orchestrator, Watchdog handler, and clean shutdown
+    ├── engine.py           # Behavioral sliding-window aggregation engine
+    ├── entropy.py          # Shannon entropy & delta analyzer on bounded byte samples
+    ├── extensions.py       # Suspicious ransomware extension and double-extension detector
+    ├── canary.py           # Safe, unique decoy canary manager with safe Windows execution
+    ├── process.py          # Non-blocking best-effort process attributor with LRU caching
+    ├── risk.py             # Explainable 0-100 weighted risk scoring model
+    ├── telemetry.py        # Resilient bounded telemetry queue with exponential backoff
+    ├── config.json         # Agent configuration template with safe defaults
     ├── requirements.txt    # Agent dependencies (watchdog, requests, psutil)
     └── run.bat             # Windows 1-click startup batch script
 ```
 
 ---
 
+## 🎯 Behavioral Detection Pipeline & Signals
+
+The detection engine evaluates multi-signal combinations rather than relying on simplistic isolated rules:
+
+| Signal | Evaluation Logic | Weight / Severity |
+|---|---|:---:|
+| **Canary Decoy Breach** | Decoy files (`.selectshans_canary_*`) placed in monitored folders. Modification, rename, or deletion indicates early alphabetical traversal. | **CRITICAL (95/100)** |
+| **Ransomware Extensions** | Matches known ransomware extensions (`.locked`, `.crypto`, `.enc`, etc.) or double extension tricks (`.docx.locked`). | **CRITICAL (85/100)** |
+| **Shannon Entropy Surge** | Computes Shannon entropy on bounded samples. Measures delta against pre-modification baselines. Flags deltas $\ge 1.8$ reaching $\ge 7.2$ on plain formats while ignoring pre-compressed media (`.zip`, `.jpg`). | **HIGH (+35 pts)** |
+| **Mass File Renames** | Tracks sliding window of renames (default: 5 in 10s). Detects rapid rename bursts. | **MEDIUM to HIGH (55-75 pts)** |
+| **Rapid File Modifications** | Tracks sliding window of modifications (default: 10 in 10s). | **MEDIUM (50 pts)** |
+| **Multi-Signal Correlation** | Concurrent renames + entropy surges escalate risk to immediate quarantine recommendation. | **CRITICAL (80-100 pts)** |
+
+### Explainable Risk Model Output
+Every detection produces human-readable justification for SOC analysts:
+```
+[CRITICAL - 95/100] Canary Decoy File Breach: Decoy canary file '.selectshans_canary_01_backup.docx' was modified.
+Reasons:
+• Decoy canary file modified during traversal.
+• Canary is sequentially named to bait early alphabetical ransomware traversal.
+• Process attribution: PID 4512 (evil_sim.exe) [Confidence: confirmed].
+Recommended Action: Isolate host machine from network immediately. Review active processes.
+```
+
+---
+
+## ⚠️ Critical Technical Honesty: Early Detection vs. Pre-Write Interception
+
+**Important Disclosure:**
+This project uses **user-mode filesystem notifications via Python Watchdog**. User-mode watchers receive notifications **after** filesystem operations occur in the operating system cache or disk.
+
+1. **What SelectShans Provides:**
+   - **Early Behavioral Anomaly Detection & Warning:** Flags ransomware behavior at the start of an attack (first 3-5 files or canary trap) before widespread encryption of thousands of files occurs.
+   - **Multi-Signal Correlation:** Identifies entropy surges, mass renames, and bait file tampering with low false positives.
+   - **Real-Time SOC Alerting & Recommended Response:** Dispatches alerts to the web console and email.
+
+2. **What User-Mode Watchdog Cannot Claim:**
+   - It **does not** perform kernel-level pre-write I/O blocking. True zero-file pre-write interception requires a certified Windows Minifilter Driver (`FLTMGR.SYS`) executing at kernel altitude.
+   - It **does not** implement destructive containment (automatic process termination) in this phase.
+   - Attribution is **best-effort user-mode** inspection; missing PIDs are honestly reported as `"unknown"`.
+
+---
+
 ## 🚀 Setup & Execution Guide (Windows 10/11)
 
 ### Prerequisites
-1. **Python 3.10+** (Ensure `python` and `pip` are in your PATH)
-2. **MySQL Server 8.0+** (Running locally on port 3306 or remote)
-3. **Node.js 18+ & npm** (For the React frontend)
+1. **Python 3.10+** (in PATH)
+2. **MySQL Server 8.0+** (port 3306)
+3. **Node.js 18+ & npm**
 
-### 1. Configure Database
-In MySQL Workbench or the MySQL command line client:
-```sql
-CREATE DATABASE IF NOT EXISTS selectshans_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-Run schema initialization:
+### 1. Backend Setup
 ```powershell
-# Navigate to backend directory
 cd backend
-
-# Execute schema on MySQL
-mysql -u root -p selectshans_db < schema.sql
-```
-
-### 2. Configure Environment
-Copy `.env.example` to `.env`:
-```powershell
-Copy-Item .env.example .env
-```
-Ensure DB credentials and secrets are configured:
-```ini
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=selectshans_db
-PORT=5000
-JWT_SECRET_KEY=change-to-a-secure-random-secret-key-in-production
-FLASK_ENV=development
-```
-
-### 3. Install Python Dependencies
-```powershell
 pip install -r requirements.txt
-```
-
-### 4. Run Idempotent Schema Migrations (Optional)
-```powershell
 python update_db.py
-```
-
-### 5. Launch the Backend Server
-```powershell
 python app.py
 ```
-The server will start on `http://127.0.0.1:5000`.
+*(Backend runs on `http://127.0.0.1:5000`)*
 
----
+### 2. Run Test Suite
+```powershell
+# Run all 57 tests (Unit, False-Positive, Integration, Performance)
+python -m unittest discover -s tests -p "test_*.py"
+```
 
-## 🔑 Key API Endpoints
+### 3. Frontend Setup
+```powershell
+cd ..\frontend
+npm install
+npm run build
+npm run dev
+```
 
-| Method | Endpoint | Auth Required | Description |
-|---|---|---|---|
-| `GET` | `/api/health` | No | System health check and database connectivity verification |
-| `POST` | `/api/login` | No | Step 1 authentication (Username/password verification, OTP dispatch) |
-| `POST` | `/api/login/verify` | No | Step 2 OTP verification (Issues JWT token with role) |
-| `POST` | `/api/signup` | No | New user registration |
-| `GET` | `/api/admin/realtime-stats` | Yes (Bearer) | Real-time security telemetry, CPU charts, anomaly metrics |
-| `GET` | `/api/admin/security-report` | Yes (Bearer) | Generates and downloads real-time PDF security report |
-| `GET` | `/api/alerts` | Yes (Bearer) | Retrieves SOAR incident alerts |
-| `POST` | `/api/alerts/<id>/resolve` | Yes (Bearer) | Marks a threat incident as resolved |
-| `GET` | `/api/detector-download` | Token Query | Packages and downloads the `SelectShans-FolderGuard.zip` agent |
-| `POST` | `/api/detector/sync-activities`| PSK Header | Endpoint agent telemetry and threat ingestion |
-| `GET` | `/api/detector/activities` | No / Bearer | Live activity feed for monitored host directory |
-| `GET` | `/api/admin/audit-log` | Yes (Admin) | Exports SOC audit log in PDF, TXT, or JSON format |
-| `POST` | `/api/admin/clear-data` | Yes (Admin) | Purges event logs and alert history |
-| `POST` | `/api/token/refresh` | Yes (Bearer) | Refreshes JWT token before expiry |
-
----
-
-## 🛡️ Endpoint FolderGuard Agent
-
-When an authenticated user clicks **"Download Detector"** on the dashboard:
-1. Backend generates a customized ZIP containing `detector.py`, `run.bat`, `requirements.txt`, and a dynamic `config.json` with the user's ID, detector token, and backend URL.
-2. The user extracts the ZIP on their Windows machine and double-clicks `run.bat`.
-3. The agent monitors the chosen folder, calculates file entropy in real-time before encryption finishes, and automatically transmits telemetry and alert signals back to the SOC backend.
+### 4. Running the Downloadable FolderGuard Agent
+```powershell
+# Extract SelectShans-FolderGuard.zip (or run directly from backend/detector_package)
+cd backend\detector_package
+pip install -r requirements.txt
+python detector.py
+# Enter the folder path you wish to protect when prompted
+```

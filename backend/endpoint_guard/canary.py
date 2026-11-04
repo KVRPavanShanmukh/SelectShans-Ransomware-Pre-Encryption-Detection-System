@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 from logger import logger
 from config import config_manager
 
@@ -27,8 +28,12 @@ class CanaryManager:
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write("This is a system generated file. Do not modify.\n" * 10)
                     
-                    # Hide the file using windows attrib
-                    os.system(f'attrib +h "{filepath}"')
+                    # Hide the file safely using subprocess on Windows
+                    if os.name == 'nt':
+                        try:
+                            subprocess.run(["attrib", "+h", filepath], capture_output=True, check=False)
+                        except Exception:
+                            pass
                     self.deployed_canaries.add(filepath)
                     logger.debug(f"Deployed canary: {filepath}")
                 except Exception as e:
@@ -43,7 +48,11 @@ class CanaryManager:
         for filepath in self.deployed_canaries:
             try:
                 if os.path.exists(filepath):
-                    os.system(f'attrib -h "{filepath}"')
+                    if os.name == 'nt':
+                        try:
+                            subprocess.run(["attrib", "-h", filepath], capture_output=True, check=False)
+                        except Exception:
+                            pass
                     os.remove(filepath)
             except Exception as e:
                 logger.error(f"Failed to clean up canary {filepath}: {e}")

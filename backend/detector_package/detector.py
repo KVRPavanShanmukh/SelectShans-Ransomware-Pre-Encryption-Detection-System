@@ -1,280 +1,244 @@
+"""
+SelectShans FolderGuard – Authoritative Endpoint Detection Agent
+Monitors protected filesystem directories, evaluates behavioral heuristics in real time,
+identifies pre-encryption ransomware activity, and syncs telemetry with the SOC backend.
+"""
 import os
+import sys
 import time
 import json
-import requests
-import threading
-from datetime import datetime
-from collections import deque
 import socket
 import uuid
+import signal
+import threading
+from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+# Consolidated detection modules
+from canary import SafeCanaryManager
+from engine import BehavioralDetectionEngine, DetectionDecision
+from telemetry import TelemetryClient
+
 # ==============================
-# LOAD CONFIG
+# CONFIGURATION & INITIALIZATION
 # ==============================
 
 CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "api_base": "http://127.0.0.1:5000",
+    "token": "demo_token",
+    "email": "user@selectshans.sec",
+    "time_window_seconds": 10.0,
+    "threshold_rename": 5,
+    "threshold_write": 10,
+    "threshold_delete": 8,
+    "entropy_threshold": 7.2,
+    "alert_cooldown_seconds": 15.0,
+    "max_queue_size": 1000,
+    "custom_extensions": []
+}
+
 if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "r") as f:
-        config = json.load(f)
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config = {**DEFAULT_CONFIG, **json.load(f)}
+    except Exception:
+        config = DEFAULT_CONFIG
 else:
-    config = {
-        "api_base": "http://127.0.0.1:5000",
-        "token": "demo_token",
-        "email": "user@selectshans.sec"
-    }
+    config = DEFAULT_CONFIG
 
 API_BASE = config.get("api_base", "http://127.0.0.1:5000")
 TOKEN = config.get("token", "")
 USER_EMAIL = config.get("email", "")
-
-# ==============================
-# SETTINGS & LISTS
-# ==============================
-
 HOSTNAME = socket.gethostname()
 DETECTOR_ID = str(uuid.uuid4())
 
-RENAME_THRESHOLD = 4
-WRITE_THRESHOLD = 10
-TIME_WINDOW = 10           # seconds
-
-rename_events = deque()
-write_events = deque()
-
-# Marked list of anomalous activities to share with website
-anomalous_activities_list = []
-activity_lock = threading.Lock()
-
-# ==============================
-# LOCAL LOGGING
-# ==============================
-
+# Local log setup
 LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "monitor.log")
 
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
 
-def write_local_log(message):
+def write_local_log(message: str):
+    """Writes timestamped status or alert entry to local log and stdout."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = f"[{timestamp}] {message}\n"
-    print(entry.strip())
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(entry)
-
-# ==============================
-# WEBSITE SYNC & EMAIL TRIGGER
-# ==============================
-
-def trigger_website_email_alert(event_type, directory, details_str, count):
-    """Triggers the website backend to send an immediate email alert to the user."""
-    payload = {
-        "token": TOKEN,
-        "event_type": event_type,
-        "details": {
-            "directory": directory,
-            "count": count,
-            "message": details_str
-        },
-        "timestamp": datetime.now().isoformat()
-    }
-
     try:
-        response = requests.post(
-            f"{API_BASE}/api/detector/log",
-            json=payload,
-            timeout=5
-        )
-        write_local_log(f"⚡ Website email trigger sent to backend (Status: {response.status_code})")
-    except Exception as e:
-        write_local_log(f"⚠️ Website email trigger failed: {e}")
-
-def sync_activities_to_website():
-    """Syncs the compiled anomalous activities list to the website server."""
-    with activity_lock:
-        if not anomalous_activities_list:
-            return
-        # Copy current list to sync
-        to_sync = list(anomalous_activities_list)
-
-    payload = {
-        "token": TOKEN,
-        "activities": to_sync
-    }
-
+        enc = sys.stdout.encoding or 'utf-8'
+        print(entry.strip().encode(enc, errors='replace').decode(enc))
+    except Exception:
+        print(entry.strip().encode('ascii', errors='replace').decode('ascii'))
     try:
-        response = requests.post(
-            f"{API_BASE}/api/detector/sync-activities",
-            json=payload,
-            timeout=5
-        )
-        if response.status_code == 200:
-            write_local_log(f"🌐 Shared {len(to_sync)} anomalous activity items with website.")
-    except Exception as e:
-        write_local_log(f"⚠️ Failed to sync activities with website: {e}")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(entry)
+    except Exception:
+        pass
 
-def mark_anomalous_activity(event_type, directory, target_file, severity, count, action_taken, process_name="FolderGuard Agent"):
-    """Marks an anomalous activity and adds it to the list shared with the website."""
-    
-    score = count * 10
-    if severity == "CRITICAL":
-        score += 50
-    elif severity == "HIGH":
-        score += 30
-        
-    activity_entry = {
-        "id": f"act_{int(time.time()*1000)}",
-        "detector_id": DETECTOR_ID,
-        "hostname": HOSTNAME,
-        "event_type": event_type,
-        "directory": directory,
-        "target_file": target_file,
-        "severity": severity,
-        "score": min(score, 100),
-        "event_count": count,
-        "action_taken": action_taken,
-        "process_name": process_name,
-        "timestamp": datetime.now().isoformat()
-    }
-
-    with activity_lock:
-        anomalous_activities_list.append(activity_entry)
-
-    write_local_log(f"🚨 MARKED ANOMALOUS ACTIVITY [{severity}]: {event_type} on {target_file or directory}")
-
-    # Immediately sync list to website
-    threading.Thread(target=sync_activities_to_website, daemon=True).start()
-
-    # Trigger website to email user if severity is HIGH or CRITICAL
-    if severity in ["HIGH", "CRITICAL"]:
-        threading.Thread(
-            target=trigger_website_email_alert,
-            args=(event_type, directory, f"Flagged {event_type} on {target_file}", count),
-            daemon=True
-        ).start()
 
 # ==============================
-# MONITOR CLASS
+# WATCHDOG EVENT HANDLER
 # ==============================
 
 class FolderMonitor(FileSystemEventHandler):
-
-    def __init__(self, monitored_path):
+    """
+    User-mode filesystem event consumer.
+    Captures create, modify, rename, and delete notifications and dispatches them
+    to the BehavioralDetectionEngine.
+    """
+    def __init__(self, engine: BehavioralDetectionEngine, telemetry: TelemetryClient):
         super().__init__()
-        self.monitored_path = monitored_path
+        self.engine = engine
+        self.telemetry = telemetry
 
-    def on_moved(self, event):
-        now = time.time()
-        rename_events.append(now)
-        
-        target_ext = os.path.splitext(event.dest_path)[1].lower()
-        is_ransom_ext = target_ext in [".locked", ".crypto", ".enc", ".crypted", ".ransom"]
+    def _handle_decision(self, decision: DetectionDecision):
+        if not decision:
+            return
 
-        write_local_log(f"File moved/renamed: {event.src_path} -> {event.dest_path}")
+        sev = decision.severity
+        score = decision.score
+        msg = f"🚨 [{sev} - {score}/100] {decision.category}: {decision.details} (Target: {decision.target_file or decision.directory})"
+        write_local_log(msg)
 
-        # Remove old events outside time window
-        while rename_events and now - rename_events[0] > TIME_WINDOW:
-            rename_events.popleft()
+        # Enqueue for backend SOC transmission
+        self.telemetry.enqueue_activity(decision.to_dict())
 
-        # Check for encrypted extension rename surge or mass rename
-        if is_ransom_ext or len(rename_events) >= RENAME_THRESHOLD:
-            severity = "CRITICAL" if is_ransom_ext else "HIGH"
-            event_type = "ransomware_extension_rename" if is_ransom_ext else "mass_rename"
-            
-            mark_anomalous_activity(
-                event_type=event_type,
-                directory=self.monitored_path,
-                target_file=os.path.basename(event.dest_path),
-                severity=severity,
-                count=len(rename_events),
-                action_taken="Process Marked & Website Email Triggered",
-                process_name="FolderGuard Agent"
-            )
-            rename_events.clear()
+        # If HIGH or CRITICAL, dispatch immediate email trigger
+        if sev in ("HIGH", "CRITICAL"):
+            threading.Thread(
+                target=self.telemetry.trigger_critical_email,
+                args=(
+                    decision.event_type,
+                    decision.directory,
+                    decision.details,
+                    decision.event_count
+                ),
+                daemon=True
+            ).start()
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        decision = self.engine.process_file_created(event.src_path)
+        if decision:
+            self._handle_decision(decision)
 
     def on_modified(self, event):
         if event.is_directory:
             return
+        decision = self.engine.process_file_modified(event.src_path)
+        if decision:
+            self._handle_decision(decision)
 
-        now = time.time()
-        write_events.append(now)
+    def on_moved(self, event):
+        decision = self.engine.process_file_renamed(event.src_path, event.dest_path)
+        if decision:
+            self._handle_decision(decision)
 
-        while write_events and now - write_events[0] > TIME_WINDOW:
-            write_events.popleft()
+    def on_deleted(self, event):
+        if event.is_directory:
+            return
+        decision = self.engine.process_file_deleted(event.src_path)
+        if decision:
+            self._handle_decision(decision)
 
-        filename = os.path.basename(event.src_path)
-
-        # Check for canary file tamper
-        if "canary" in filename.lower() or "honey" in filename.lower():
-            mark_anomalous_activity(
-                event_type="canary_file_breach",
-                directory=self.monitored_path,
-                target_file=filename,
-                severity="CRITICAL",
-                count=1,
-                action_taken="Canary Decoy Tripped & Email Alert Sent",
-                process_name="FolderGuard Agent"
-            )
-
-        # Check for rapid write surge
-        elif len(write_events) >= WRITE_THRESHOLD:
-            mark_anomalous_activity(
-                event_type="rapid_file_write",
-                directory=self.monitored_path,
-                target_file=filename,
-                severity="MEDIUM",
-                count=len(write_events),
-                action_taken="Rapid Write Rate Logged to Website",
-                process_name="FolderGuard Agent"
-            )
-            write_events.clear()
 
 # ==============================
-# BACKGROUND THREADS
+# MONITOR ORCHESTRATOR
 # ==============================
 
-def ping_and_sync_loop():
-    while True:
+class FolderGuardAgent:
+    def __init__(self, monitored_path: str):
+        self.monitored_path = os.path.normcase(os.path.abspath(monitored_path))
+        self.canary_mgr = SafeCanaryManager(instance_id=DETECTOR_ID[:8])
+        self.engine = BehavioralDetectionEngine(
+            monitored_directory=self.monitored_path,
+            time_window_seconds=float(config.get("time_window_seconds", 10.0)),
+            threshold_rename=int(config.get("threshold_rename", 5)),
+            threshold_write=int(config.get("threshold_write", 10)),
+            threshold_delete=int(config.get("threshold_delete", 8)),
+            entropy_threshold=float(config.get("entropy_threshold", 7.2)),
+            alert_cooldown_seconds=float(config.get("alert_cooldown_seconds", 15.0)),
+            max_queue_size=int(config.get("max_queue_size", 1000)),
+            custom_extensions=config.get("custom_extensions", []),
+            canary_manager=self.canary_mgr
+        )
+        self.telemetry = TelemetryClient(
+            api_base=API_BASE,
+            token=TOKEN,
+            detector_id=DETECTOR_ID,
+            hostname=HOSTNAME
+        )
+        self.observer = Observer()
+        self._running = False
+
+    def start(self):
+        write_local_log("Deploying canary decoys in monitored directory...")
+        deployed = self.canary_mgr.deploy_canaries(self.monitored_path)
+        write_local_log(f"Active canary decoys: {len(deployed)} deployed.")
+
+        # Start background telemetry sync & heartbeat
+        self.telemetry.start()
+
+        # Schedule watchdog handler
+        handler = FolderMonitor(self.engine, self.telemetry)
+        self.observer.schedule(handler, self.monitored_path, recursive=True)
+        self.observer.start()
+        self._running = True
+
+        print("\n=======================================================")
+        print("  SelectShans FolderGuard Agent - Running & Connected")
+        print("=======================================================")
+        print(f" Monitored Folder: {self.monitored_path}")
+        print(f" Registered Email: {USER_EMAIL}")
+        print(f" Website API Base: {API_BASE}")
+        print(f" Local Log File  : {LOG_FILE}")
+        print(f" Canaries Active : {len(deployed)}")
+        print(" Status          : Active & Syncing Anomalous Activities")
+        print("=======================================================\n")
+
+    def stop(self):
+        if not self._running:
+            return
+        self._running = False
+        write_local_log("Shutting down SelectShans FolderGuard...")
+
         try:
-            # 1. Ping active status
-            requests.post(
-                f"{API_BASE}/api/detector/ping",
-                json={"token": TOKEN},
-                timeout=5
-            )
-            # 2. Sync activity list to website
-            sync_activities_to_website()
+            self.observer.stop()
+            self.observer.join(timeout=3)
         except Exception:
             pass
-        time.sleep(5)
 
-def start_monitor(path):
-    # Start heartbeat ping & activity sync loop
-    threading.Thread(target=ping_and_sync_loop, daemon=True).start()
+        # Clean up only canaries created by this instance
+        cleaned = self.canary_mgr.cleanup()
+        write_local_log(f"Canary decoys safely removed: {cleaned}.")
 
-    observer = Observer()
-    observer.schedule(FolderMonitor(path), path, recursive=True)
-    observer.start()
+        # Flush final telemetry
+        self.telemetry.stop(timeout=2.0)
+        write_local_log("FolderGuard stopped cleanly.")
 
-    print("\n=======================================================")
-    print("  SelectShans FolderGuard Agent - Running & Connected")
-    print("=======================================================")
-    print(f" Monitored Folder: {path}")
-    print(f" Registered Email: {USER_EMAIL}")
-    print(f" Website API Base: {API_BASE}")
-    print(f" Local Log File  : {LOG_FILE}")
-    print(" Status          : Active & Syncing Anomalous Activities")
-    print("=======================================================\n")
+
+def start_monitor(path: str):
+    agent = FolderGuardAgent(path)
+
+    def signal_handler(signum, frame):
+        agent.stop()
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    except Exception:
+        pass
+
+    agent.start()
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        observer.stop()
+        agent.stop()
 
-    observer.join()
 
 # ==============================
 # ENTRY POINT
@@ -284,19 +248,21 @@ if __name__ == "__main__":
     print("\n-------------------------------------------------------")
     print(" SelectShans FolderGuard - Downloadable Application")
     print("-------------------------------------------------------")
-    user_input = input("Enter directory to monitor for anomalous activities: ").strip()
+    if len(sys.argv) > 1:
+        target_dir = sys.argv[1].strip()
+    else:
+        target_dir = input("Enter directory to monitor for anomalous activities: ").strip()
 
-    if not user_input:
-        user_input = os.getcwd()
-        print(f"Using default current directory: {user_input}")
+    if not target_dir:
+        target_dir = os.getcwd()
+        print(f"Using default current directory: {target_dir}")
 
-    if not os.path.exists(user_input):
-        print(f"Directory '{user_input}' does not exist. Creating directory...")
+    if not os.path.exists(target_dir):
+        print(f"Directory '{target_dir}' does not exist. Creating directory...")
         try:
-            os.makedirs(user_input)
+            os.makedirs(target_dir)
         except Exception as e:
             print("Failed to create directory:", e)
-            user_input = os.getcwd()
+            target_dir = os.getcwd()
 
-    MONITOR_PATH = user_input
-    start_monitor(MONITOR_PATH)
+    start_monitor(target_dir)

@@ -30,7 +30,11 @@ def verify_detector_zip():
         namelist = zf.namelist()
         print(f"Downloaded ZIP contains {len(namelist)} items: {namelist}")
         
-        required_files = ["config.json", "detector.py", "requirements.txt", "run.bat"]
+        required_files = [
+            "config.json", "detector.py", "requirements.txt", "run.bat",
+            "canary.py", "engine.py", "entropy.py", "extensions.py",
+            "process.py", "risk.py", "telemetry.py"
+        ]
         missing = [f for f in required_files if f not in namelist]
         
         if missing:
