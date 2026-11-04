@@ -34,7 +34,12 @@ const AuditLog = ({ userId, apiBase = '', onBack }) => {
     const fetchAuditLogs = async () => {
         setLoadingLogs(true);
         try {
-            const response = await fetch(`${apiBase}/api/admin/audit-log?user_id=${userId || ''}&format=json`);
+            const token = localStorage.getItem('jwtToken');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            const response = await fetch(`${apiBase}/api/admin/audit-log?user_id=${userId || ''}&format=json`, { headers });
             if (response.ok) {
                 const data = await response.json();
                 setLogs(Array.isArray(data) ? data : []);
@@ -49,8 +54,13 @@ const AuditLog = ({ userId, apiBase = '', onBack }) => {
     const handleDownload = async () => {
         setDownloading(true);
         try {
+            const token = localStorage.getItem('jwtToken');
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             const url = `${apiBase}/api/admin/audit-log?user_id=${userId || ''}&format=${exportFormat}`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers });
 
             if (response.ok) {
                 const blob = await response.blob();

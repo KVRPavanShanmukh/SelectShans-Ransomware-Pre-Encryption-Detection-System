@@ -51,13 +51,20 @@ const Dashboard = ({ userId, apiBase = '' }) => {
     const fetchRealtimeStats = async () => {
       try {
         const storedUserId = localStorage.getItem('userId') || userId;
-        const res = await fetch(`${apiBase}/api/admin/realtime-stats?user_id=${storedUserId}`);
+        const token = localStorage.getItem('jwtToken');
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch(`${apiBase}/api/admin/realtime-stats?user_id=${storedUserId}`, { headers });
         if (res.ok) {
           const data = await res.json();
           setChartData(data.chart_data);
           setAnomalyScore(data.anomaly_score);
           setNetConns(data.active_connections);
           setFilesProtected(data.files_protected);
+        } else if (res.status === 401) {
+          console.warn("Realtime stats unauthorized - token may have expired");
         }
       } catch (err) {
         console.error("Error fetching realtime stats:", err);
@@ -85,8 +92,13 @@ const Dashboard = ({ userId, apiBase = '' }) => {
     try {
       setIsGeneratingPDF(true);
       const storedUserId = localStorage.getItem('userId') || userId || '';
+      const token = localStorage.getItem('jwtToken');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const url = `${apiBase}/api/admin/security-report${storedUserId ? `?user_id=${storedUserId}` : ''}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to generate security report');

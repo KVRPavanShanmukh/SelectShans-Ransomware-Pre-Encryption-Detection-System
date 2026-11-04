@@ -1,201 +1,146 @@
-# 🛡️ Ransomware Pre-Encryption Detection System
+# 🛡️ SelectShans – Ransomware Pre-Encryption Detection System
+## Backend Architecture & Technical Guide
 
-A full-stack project that detects ransomware behaviour *before* files are encrypted,
-based on system event monitoring and anomaly analysis.  
-This solution includes:
-
-🟢 A **Spring Boot backend** to receive and analyze system logs  
-🟢 A **React + Vite dashboard** for visualization and alerts  
-🟢 A **secure database** to store events, hashes, and alerts  
-🟢 A **JWT-based login system** for authentication  
+SelectShans is a full-stack cybersecurity defense system designed to detect and intercept ransomware attacks before catastrophic mass-encryption occurs. It combines real-time filesystem heuristics (Shannon entropy scoring, rapid write/modification thresholds, honeypot baiting), an automated endpoint detector package, and a centralized Security Operations Center (SOC) dashboard.
 
 ---
 
-## 📌 Overview
+## 📌 Architecture Overview
 
-Ransomware attacks encrypt user files rapidly, often within seconds.  
-Instead of responding *after* encryption, this system monitors activity and detects anomalous behaviour — especially high-entropy file write patterns and mass renaming — to stop attacks early.
+```
+                                +-----------------------------+
+                                |  React 19 + Vite Dashboard  |
+                                |  (Threat Console & SOC UI)  |
+                                +--------------+--------------+
+                                               |
+                                     REST APIs / JWT Bearer
+                                               |
+                                               v
++-------------------------------+       +-----------------------------+
+|    SelectShans FolderGuard    | ----> |     Flask Backend Server    |
+|  (Endpoint Python Watchdog)   | HTTP  |   (app.py / admin_routes)   |
++-------------------------------+ Logs  +--------------+--------------+
+                                                       |
+                                               MySQL Connector
+                                                       v
+                                        +-----------------------------+
+                                        |    MySQL 8.0+ Database      |
+                                        |  (users, alerts, events)    |
+                                        +-----------------------------+
+```
 
-Key features:
-
-- 📌 **Real-time anomaly detection**
-- 📊 **Events logging with tamper-proof hashes**
-- 🚨 **Alert notifications for admin and user**
-- 🔐 **Secure authentication & authorization**
-- 💾 **Dedicated backend with Spring Boot & MySQL**
-- 📱 **Frontend dashboard with React + Vite**
-
----
-
-## 📂 Repository Structure
-
-
-📦 RansomeWare-project
-├── backend/ # Spring Boot backend
-│ ├── src/main/java/…
-│ ├── application.properties
-│ └── pom.xml
-├── public/ # Frontend assets & UI
-├── src/ # React + Vite frontend
-├── .gitignore
-├── LICENSE
-└── README.md # ← This file
-
-
----
-
-## 🧠 How It Works
-
-### Backend
-1. Receives event logs from monitoring agents  
-2. Stores logs and generates SHA-256 hashes for tamper-proof integrity  
-3. Matches events against whitelist and thresholds  
-4. Triggers alerts if suspicious behaviour is found  
-5. Stores alert logs and optionally notifies users/admin
-
-### Frontend
-- Displays real-time events
-- Shows alert list and severity
-- Provides login/role management
+### 1. Technology Stack
+- **Backend Framework:** Python 3.10+ / Flask 3.0+
+- **Authentication:** PyJWT (HS256) with role-based access control (`admin`, `user`) and two-step OTP verification.
+- **Reporting Engine:** ReportLab 4.0+ for high-fidelity PDF security audit generation.
+- **Telemetry Visualizations:** Matplotlib with headless Agg rendering.
+- **Database:** MySQL 8.0+ via `mysql-connector-python` with connection pooling.
+- **Endpoint Agent:** Python Watchdog filesystem monitor with Shannon entropy calculation (`math.log2`).
+- **Frontend:** React 19, Vite, Recharts, Lucide Icons.
 
 ---
 
-## 🚀 Features
+## 📂 Backend File Structure
 
-### 🎯 Anomaly Detection
-- Entropy-based detection  
-- Write frequency thresholds  
-- Whitelist process support  
-
-### 🛡 Security
-- JWT authentication
-- Secure password hashing
-- Centralized alerts
-
-### 📊 Dashboard
-- Alerts view (LOW → CRITICAL)
-- Live event stream
-- User login & session tracking
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Tech |
-|-------|------|
-| Backend | Java, Spring Boot, JPA |
-| Auth | JWT, Spring Security |
-| Frontend | React + Vite |
-| Database | MySQL |
-| Logging | Anomaly & Event Logs |
+```
+backend/
+├── app.py                  # Core Flask server, routing, database pool, and PDF generator
+├── admin_routes.py         # Admin management, audit logging, and profile endpoints
+├── jwt_utils.py            # Token generation, decoding, expiry handling, and @token_required decorator
+├── schema.sql              # Clean MySQL schema with tables, indices, and foreign keys
+├── update_db.py            # Backward-compatible idempotent migration script
+├── fix_env.py              # Environment configuration repair utility
+├── requirements.txt        # Verified Python dependencies (Flask, PyJWT, ReportLab, psutil, etc.)
+├── .env.example            # Environment configuration template
+└── detector_package/       # Distributable endpoint agent bundled dynamically into ZIP
+    ├── detector.py         # Watchdog agent with entropy analysis and telemetry sync
+    ├── config.json         # Agent configuration template
+    ├── requirements.txt    # Agent dependencies (watchdog, requests, psutil)
+    └── run.bat             # Windows 1-click startup batch script
+```
 
 ---
 
-## 🚧 Setup Instructions
+## 🚀 Setup & Execution Guide (Windows 10/11)
 
-### 🧩 Backend
+### Prerequisites
+1. **Python 3.10+** (Ensure `python` and `pip` are in your PATH)
+2. **MySQL Server 8.0+** (Running locally on port 3306 or remote)
+3. **Node.js 18+ & npm** (For the React frontend)
 
-1. Clone the repo  
-2. Create `RANSOMWARE` database in MySQL
-3. Add DB credentials in `application.properties`
-4. Run the backend in your IDE or via `mvn spring-boot:run`
+### 1. Configure Database
+In MySQL Workbench or the MySQL command line client:
+```sql
+CREATE DATABASE IF NOT EXISTS selectshans_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
----
+Run schema initialization:
+```powershell
+# Navigate to backend directory
+cd backend
 
-## 🔑 Authentication
+# Execute schema on MySQL
+mysql -u root -p selectshans_db < schema.sql
+```
 
-Use the default admin defined in the DB:
+### 2. Configure Environment
+Copy `.env.example` to `.env`:
+```powershell
+Copy-Item .env.example .env
+```
+Ensure DB credentials and secrets are configured:
+```ini
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=selectshans_db
+PORT=5000
+JWT_SECRET_KEY=change-to-a-secure-random-secret-key-in-production
+FLASK_ENV=development
+```
 
-| Username | `admin` |
-|----------|--------|
-| Password | `password123` |
+### 3. Install Python Dependencies
+```powershell
+pip install -r requirements.txt
+```
 
-This account is stored securely with bcrypt hashes.
+### 4. Run Idempotent Schema Migrations (Optional)
+```powershell
+python update_db.py
+```
 
----
-
-## 📍 API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/login` | Obtain JWT token |
-| POST | `/api/logs` | Submit event log |
-| GET | `/api/alerts` | Get all alerts |
-| GET | `/api/events` | Get all logged events |
-
-*(Protected endpoints require a Bearer token)*
-
----
-
-## 📝 Example Usage
-
-**Login**
-
-```bash
-curl -X POST /api/auth/login \
--H "Content-Type: application/json" \
--d '{"username":"admin","password":"password123"}'
-
-Send Log
-
-curl -X POST /api/logs \
--H "Authorization: Bearer <token>" \
--H "Content-Type: application/json" \
--d '{
-  "eventId":4663,
-  "processName":"evil.exe",
-  "pid":1234,
-  "targetPath":"C:/Users/attacked/file.txt",
-  "accessType":"Write",
-  "entropy":8.2,
-  "timestamp":"2026-02-15T10:20:30"
-}'
-🔒 Security Considerations
-
-This is a defensive simulation project and not production antivirus code.
-
-Designed for learning and academic demonstration only.
-
-Do not install components with full system access privileges on production systems.
-
-🧑‍💻 Contributing
-
-If you’d like to improve this project:
-
-Fork the repo
-
-Create a new feature branch
-
-Submit a pull request
-
-All valid enhancements are welcome!
-
-📄 License
-
-This project is licensed under GPL-3.0 License.
-
-❤️ Acknowledgments
-
-Inspired by real-world ransomware research and anomaly monitoring principles.
-
+### 5. Launch the Backend Server
+```powershell
+python app.py
+```
+The server will start on `http://127.0.0.1:5000`.
 
 ---
 
-# 🔥 Why This README is Good  
+## 🔑 Key API Endpoints
 
-✅ Clearly explains *what the project does*  
-✅ Gives *setup instructions*  
-✅ Shows *API usage*  
-✅ Communicates *limitations and ethics*  
-✅ Helps professor, recruiter, or developer quickly understand  
+| Method | Endpoint | Auth Required | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | No | System health check and database connectivity verification |
+| `POST` | `/api/login` | No | Step 1 authentication (Username/password verification, OTP dispatch) |
+| `POST` | `/api/login/verify` | No | Step 2 OTP verification (Issues JWT token with role) |
+| `POST` | `/api/signup` | No | New user registration |
+| `GET` | `/api/admin/realtime-stats` | Yes (Bearer) | Real-time security telemetry, CPU charts, anomaly metrics |
+| `GET` | `/api/admin/security-report` | Yes (Bearer) | Generates and downloads real-time PDF security report |
+| `GET` | `/api/alerts` | Yes (Bearer) | Retrieves SOAR incident alerts |
+| `POST` | `/api/alerts/<id>/resolve` | Yes (Bearer) | Marks a threat incident as resolved |
+| `GET` | `/api/detector-download` | Token Query | Packages and downloads the `SelectShans-FolderGuard.zip` agent |
+| `POST` | `/api/detector/sync-activities`| PSK Header | Endpoint agent telemetry and threat ingestion |
+| `GET` | `/api/detector/activities` | No / Bearer | Live activity feed for monitored host directory |
+| `GET` | `/api/admin/audit-log` | Yes (Admin) | Exports SOC audit log in PDF, TXT, or JSON format |
+| `POST` | `/api/admin/clear-data` | Yes (Admin) | Purges event logs and alert history |
+| `POST` | `/api/token/refresh` | Yes (Bearer) | Refreshes JWT token before expiry |
 
 ---
 
-If you want, I can also generate:
+## 🛡️ Endpoint FolderGuard Agent
 
-🔹 A **project demo GIF**  
-🔹 A **tech stack diagram**  
-🔹 A **user guide PDF**  
-
-Just ask 🙂
-::contentReference[oaicite:1]{index=1}
+When an authenticated user clicks **"Download Detector"** on the dashboard:
+1. Backend generates a customized ZIP containing `detector.py`, `run.bat`, `requirements.txt`, and a dynamic `config.json` with the user's ID, detector token, and backend URL.
+2. The user extracts the ZIP on their Windows machine and double-clicks `run.bat`.
+3. The agent monitors the chosen folder, calculates file entropy in real-time before encryption finishes, and automatically transmits telemetry and alert signals back to the SOC backend.
