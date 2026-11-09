@@ -85,3 +85,10 @@ releases/
 *.p12
 *.pem
 *.key
+
+
+# Ignore compiled binaries and distribution archives
+*.exe
+*.zip
+**/publish/
+**/publish-small/
