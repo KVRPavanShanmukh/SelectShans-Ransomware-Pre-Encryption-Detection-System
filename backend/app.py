@@ -26,19 +26,15 @@ load_dotenv()
 
 APP_ENV = os.getenv("APP_ENV", "development")
 
-if APP_ENV.lower() == "production":
-    REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
-    for var in REQUIRED_ENV_VARS:
-        if not os.getenv(var):
-            raise RuntimeError(f"{var} environment variable is required in production")
-else:
-    # Safe development fallbacks for local testing and CI/CD
-    if not os.getenv("JWT_SECRET"):
-        os.environ["JWT_SECRET"] = "selectshans_dev_jwt_secret_key_2026_test"
-    if not os.getenv("DETECTOR_SECRET"):
-        os.environ["DETECTOR_SECRET"] = "selectshans_dev_detector_secret_key_2026_test"
-    if not os.getenv("DB_PASSWORD"):
-        os.environ["DB_PASSWORD"] = ""
+# Strict environment variable enforcement — no hardcoded fallback secrets allowed
+REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
+for var in REQUIRED_ENV_VARS:
+    if not os.getenv(var):
+        raise RuntimeError(f"Missing required environment variable: {var}. Configure it in your environment or .env file.")
+
+JWT_SECRET = os.environ["JWT_SECRET"]
+DETECTOR_SECRET = os.environ["DETECTOR_SECRET"]
+DB_PASSWORD = os.environ["DB_PASSWORD"]
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -212,10 +208,6 @@ def init_db(db_pool):
             except Exception:
                 pass
 
-        try:
-            cursor.execute("UPDATE users SET role = 'admin' WHERE username = 'admin';")
-        except Exception:
-            pass
             
         conn.commit()
         cursor.close()
@@ -419,8 +411,7 @@ def login():
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY)
     }
 
-    print(f"\n[DEBUG] Login Attempt for {email}")
-    print(f"[DEBUG] OTP: {otp} | PSK: {psk}\n")
+
 
     html_body = f"""
     <!DOCTYPE html>
@@ -539,6 +530,12 @@ def verify():
 
     if not pending:
         return jsonify({"error": "Invalid or expired session"}), 401
+
+    # Strict expiration check against pending.get("expires_at")
+    expires_at = pending.get("expires_at")
+    if not expires_at or datetime.now(timezone.utc) > expires_at:
+        _pending_logins.pop(identifier, None)
+        return jsonify({"error": "OTP has expired. Please initiate login again."}), 401
 
     if pending["otp"] != data.get("otp") or pending["psk"] != data.get("psk"):
         return jsonify({"error": "Invalid OTP/PSK"}), 401
@@ -901,6 +898,9 @@ def detector_sync_activities():
     if not isinstance(activities, list):
         return jsonify({"error": "activities must be a list"}), 400
 
+    # Cap incoming activities array to a maximum of 100 items
+    activities = activities[:100]
+
     conn = pool.get_connection()
     cursor = conn.cursor()
 
@@ -976,10 +976,15 @@ SelectShans Engine
 
 
 @app.route('/api/detector/activities', methods=['GET'])
+@token_required
 def get_detector_activities():
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return jsonify([]), 200
+    current_user_id = g.user['user_id']
+    is_admin = g.user.get('role') == 'admin'
+    target_user_id = request.args.get("user_id", type=int)
+
+    # Restrict user_id query so non-admins can only query their own telemetry
+    if not is_admin or not target_user_id:
+        target_user_id = current_user_id
 
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -987,9 +992,9 @@ def get_detector_activities():
         cursor.execute("""
             SELECT id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details, created_at
             FROM detector_activities
-            WHERE user_id = %s OR user_id IS NULL
+            WHERE user_id = %s
             ORDER BY created_at DESC LIMIT 100
-        """, (user_id,))
+        """, (target_user_id,))
         rows = cursor.fetchall()
         for r in rows:
             if r.get("created_at"):
@@ -1018,12 +1023,17 @@ def detector_ping():
 
 
 @app.route('/api/detector/status', methods=['GET'])
+@token_required
 def detector_status():
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return jsonify({"active": False}), 200
+    current_user_id = g.user['user_id']
+    is_admin = g.user.get('role') == 'admin'
+    target_user_id = request.args.get("user_id", type=int)
 
-    last_ping = _active_detectors.get(user_id)
+    # Restrict user_id query so non-admins can only query their own detector status
+    if not is_admin or not target_user_id:
+        target_user_id = current_user_id
+
+    last_ping = _active_detectors.get(target_user_id)
     if not last_ping:
         return jsonify({"active": False}), 200
 
@@ -1467,6 +1477,8 @@ def get_security_report_pdf():
 @app.route('/api/admin/realtime-stats', methods=['GET'])
 @token_required
 def get_realtime_stats():
+    if g.user.get('role') != 'admin':
+        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
         
     conn = pool.get_connection()
@@ -1813,6 +1825,8 @@ def refresh_jwt_token():
 @app.route('/api/alerts', methods=['GET'])
 @token_required
 def get_alerts():
+    if g.user.get('role') != 'admin':
+        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
     
     conn = pool.get_connection()
@@ -1835,6 +1849,8 @@ def get_alerts():
 @app.route('/api/alerts/<int:alert_id>/resolve', methods=['POST'])
 @token_required
 def resolve_alert(alert_id):
+    if g.user.get('role') != 'admin':
+        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
     
     conn = pool.get_connection()

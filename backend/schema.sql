@@ -168,14 +168,4 @@ CREATE TABLE IF NOT EXISTS system_health_snapshots (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Insert Default Admin (Password: password123, Answer to SQ1 "11": 11)
--- Only run if table is empty
-INSERT IGNORE INTO users (username, password_hash, email, sec_q, sec_a_hash, role)
-VALUES (
-    'admin',
-    'scrypt:32768:8:1$rn95kIq9aE2NbVYS$5c6e29209543965c94b4bb18d7102bc72b88d675b00a74f66ba0c21f7fef9551adec4069eee46e8cc854d1791bf9b16c448dcea09416fffa4abd91d1acd07777', -- password123
-    'admin@selectshans.local',
-    'What is the Event ID for FileCreate in Sysmon?',
-    'scrypt:32768:8:1$0ojtnWWc3ZW50wFJ$9a89ebf942268dd75ee79b4dbfda8d53ee81968345a0d39c970cc5991e495e2c5c746101e4e249a59e8c489b6f52601259925ebec0d70aed93cc369861c765a8', -- 11
-    'admin'
-);
+

@@ -6,15 +6,15 @@ services:
     container_name: sentinelstream-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-shanmukh@2006}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD environment variable is required}
       MYSQL_DATABASE: ${DB_NAME:-RANSOMWARE}
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     volumes:
       - db-data:/var/lib/mysql
       - ../backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-shanmukh@2006}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,20 +26,20 @@ services:
       target: backend
     container_name: sentinelstream-backend
     restart: always
-    ports:
-      - "5000:5000"
+    expose:
+      - "5000"
     environment:
       - DB_HOST=db
       - DB_PORT=3306
       - DB_USER=root
-      - DB_PASSWORD=${DB_PASSWORD:-shanmukh@2006}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD environment variable is required}
       - DB_NAME=${DB_NAME:-RANSOMWARE}
-      - DETECTOR_SECRET=${DETECTOR_SECRET:-prd-secret}
+      - DETECTOR_SECRET=${DETECTOR_SECRET:?DETECTOR_SECRET environment variable is required}
       - MAIL_HOST=${MAIL_HOST:-smtp.gmail.com}
       - MAIL_PORT=${MAIL_PORT:-587}
-      - MAIL_USER=${MAIL_USER:-example@gmail.com}
-      - MAIL_PASS=${MAIL_PASS:-your_key}
-      - JWT_SECRET=${JWT_SECRET:-sentinelstream_super_secure_random_string_change_this_12345}
+      - MAIL_USER=${MAIL_USER:-}
+      - MAIL_PASS=${MAIL_PASS:-}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET environment variable is required}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1d}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     depends_on:

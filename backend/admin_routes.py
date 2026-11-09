@@ -9,6 +9,7 @@ import io
 import base64
 import hashlib
 import os
+import html
 
 # ReportLab PDF imports
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -394,9 +395,11 @@ def register_admin_routes(app, pool):
             for log in logs[:200]:
                 ts_val = log['timestamp']
                 ts_formatted = ts_val.strftime('%Y-%m-%d\n%H:%M:%S UTC') if isinstance(ts_val, datetime) else str(ts_val)
-                loc_formatted = get_place(log.get('ip_address'))
-                user_action = f"<b>{log.get('username') or 'User'}</b><br/><code>{log.get('action')}</code>"
-                desc_formatted = str(log.get('description') or 'N/A')
+                loc_formatted = html.escape(str(get_place(log.get('ip_address'))))
+                safe_username = html.escape(str(log.get('username') or 'User'))
+                safe_action = html.escape(str(log.get('action') or 'N/A'))
+                user_action = f"<b>{safe_username}</b><br/><code>{safe_action}</code>"
+                desc_formatted = html.escape(str(log.get('description') or 'N/A'))
 
                 table_data.append([
                     Paragraph(ts_formatted, styles['Normal']),
