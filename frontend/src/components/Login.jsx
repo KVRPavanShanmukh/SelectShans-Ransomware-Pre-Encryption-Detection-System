@@ -97,6 +97,10 @@ const Login = ({ onLogin, onSwitchToSignup, onSwitchToAdmin }) => {
       if (response.ok) {
         const assignedRole = data.role || 'user';
         // Store tokens
+        sessionStorage.setItem("detector_token", data.detector_token || "");
+        sessionStorage.setItem("user_role", assignedRole);
+        sessionStorage.setItem("userId", String(data.user_id));
+        sessionStorage.setItem("jwtToken", data.token);
         localStorage.setItem("detector_token", data.detector_token || "");
         localStorage.setItem("user_role", assignedRole);
         localStorage.setItem("userId", String(data.user_id));

@@ -96,6 +96,10 @@ const AdminLogin = ({ onAdminLogin, onCancel }) => {
           return;
         }
 
+        sessionStorage.setItem("detector_token", data.detector_token || "");
+        sessionStorage.setItem("user_role", 'admin');
+        sessionStorage.setItem("userId", String(data.user_id));
+        sessionStorage.setItem("jwtToken", data.token);
         localStorage.setItem("detector_token", data.detector_token || "");
         localStorage.setItem("user_role", 'admin');
         localStorage.setItem("userId", String(data.user_id));

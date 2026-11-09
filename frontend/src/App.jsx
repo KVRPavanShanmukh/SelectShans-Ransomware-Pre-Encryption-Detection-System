@@ -22,6 +22,25 @@ import TechDetail from './components/TechDetail';
 import DraggableLearnButton from './components/DraggableLearnButton';
 import './App.css';
 
+// Cryptographic helper: decode and extract role and user claims directly from JWT payload
+const decodeJwtPayload = (token) => {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
 function App() {
   // Handle direct routing for Learning Hub pages
   const pathname = window.location.pathname;
@@ -64,23 +83,36 @@ function App() {
     }
   }, [isAuthenticated, jwtToken, isAdmin]);
 
-  // Check for persisted session on app load
+  // Check for persisted session on app load via sessionStorage (never localStorage)
   useEffect(() => {
-    const storedToken = localStorage.getItem('jwtToken');
-    const storedUserId = localStorage.getItem('userId');
-    const storedRole = localStorage.getItem('user_role');
+    const storedToken = sessionStorage.getItem('jwtToken');
+    const storedUserId = sessionStorage.getItem('userId');
     
-    if (storedToken && storedUserId) {
+    if (storedToken) {
+      const payload = decodeJwtPayload(storedToken);
+      // Evict expired session tokens immediately
+      if (payload?.exp && payload.exp * 1000 < Date.now()) {
+        handleLogout();
+        return;
+      }
+
+      // Role is decoded strictly from the cryptographically verified JWT payload, preventing client spoofing
+      const decodedRole = payload?.role || 'user';
+      const effectiveUserId = payload?.user_id || (storedUserId ? parseInt(storedUserId) : null);
+
       setJwtToken(storedToken);
-      setUserId(parseInt(storedUserId));
+      setUserId(effectiveUserId);
       setIsAuthenticated(true);
-      if (storedRole === 'admin') {
+
+      if (decodedRole === 'admin') {
         setIsAdmin(true);
         setAdminViewMode('admin');
       } else {
         setIsAdmin(false);
         setAdminViewMode('threat_console');
       }
+
+      sessionStorage.setItem('user_role', decodedRole);
       startTokenRefreshTimer(storedToken);
     }
   }, []);
@@ -100,8 +132,12 @@ function App() {
         if (response.ok) {
           const data = await response.json();
           const newToken = data.token;
-          localStorage.setItem('jwtToken', newToken);
+          sessionStorage.setItem('jwtToken', newToken);
           setJwtToken(newToken);
+          const payload = decodeJwtPayload(newToken);
+          const decodedRole = payload?.role || 'user';
+          sessionStorage.setItem('user_role', decodedRole);
+          setIsAdmin(decodedRole === 'admin');
         } else {
           // Token invalid, need to re-login
           handleLogout();
@@ -115,14 +151,19 @@ function App() {
   };
 
   const handleLogin = (userId, token, role) => {
-    localStorage.setItem('jwtToken', token);
-    localStorage.setItem('userId', String(userId));
-    const assignedRole = role || localStorage.getItem('user_role') || 'user';
-    localStorage.setItem('user_role', assignedRole);
-    setUserId(userId);
+    sessionStorage.setItem('jwtToken', token);
+    // Role strictly derived from JWT payload
+    const payload = decodeJwtPayload(token);
+    const decodedRole = payload?.role || role || 'user';
+    const effectiveUserId = payload?.user_id || userId;
+
+    sessionStorage.setItem('userId', String(effectiveUserId));
+    sessionStorage.setItem('user_role', decodedRole);
+
+    setUserId(effectiveUserId);
     setJwtToken(token);
     setIsAuthenticated(true);
-    if (assignedRole === 'admin') {
+    if (decodedRole === 'admin') {
       setIsAdmin(true);
       setAdminViewMode('admin');
     } else {
@@ -135,10 +176,16 @@ function App() {
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem('jwtToken');
+    sessionStorage.removeItem('userId');
+    sessionStorage.removeItem('user_role');
+    sessionStorage.removeItem('detector_token');
+    // Purge any legacy localStorage items to prevent stale auth leakage
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('userId');
     localStorage.removeItem('user_role');
     localStorage.removeItem('detector_token');
+
     setJwtToken(null);
     setBetaToken(null);
     setUserId(null);
@@ -236,8 +283,12 @@ function App() {
             jwtToken={jwtToken} 
             onLogout={handleLogout} 
             onTokenUpdated={(newToken) => {
-              localStorage.setItem('jwtToken', newToken);
+              sessionStorage.setItem('jwtToken', newToken);
               setJwtToken(newToken);
+              const payload = decodeJwtPayload(newToken);
+              const decodedRole = payload?.role || 'user';
+              sessionStorage.setItem('user_role', decodedRole);
+              setIsAdmin(decodedRole === 'admin');
             }} 
           />
           <div className="user-profile" style={{ position: 'relative' }}>

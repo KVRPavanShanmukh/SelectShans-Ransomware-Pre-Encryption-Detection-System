@@ -58,6 +58,16 @@ class TestPhase2Entropy(unittest.TestCase):
         # Directory path passed instead of file
         self.assertEqual(calculate_file_entropy(self.temp_dir), 0.0)
 
+    def test_02b_tri_point_sparse_encryption(self):
+        # File larger than 24KB with plaintext head (first 24KB) and encrypted middle & tail
+        sparse_file = os.path.join(self.temp_dir, "sparse_doc.dat")
+        with open(sparse_file, "wb") as f:
+            f.write(b"\x00" * 24576 + os.urandom(40960))
+
+        # Tri-point sampling reads head (zeros), middle (random), and tail (random)
+        entropy = calculate_file_entropy(sparse_file)
+        self.assertGreater(entropy, 5.0, f"Expected elevated entropy from tri-point sampling, got {entropy}")
+
     def test_03_entropy_tracker_delta_and_natural_compressed(self):
         tracker = EntropyTracker()
 

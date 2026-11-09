@@ -40,6 +40,8 @@ def calculate_bytes_entropy(data: bytes) -> float:
 def calculate_file_entropy(filepath: str, sample_size: int = DEFAULT_SAMPLE_SIZE) -> float:
     """
     Safely calculates Shannon entropy of a file on a bounded byte sample.
+    Uses Tri-Point Multi-Chunk Sampling (head, middle, tail) for files larger
+    than 24KB to detect sparse or intermittent encryption patterns.
     Handles inaccessible or nonexistent files gracefully without crashing.
     """
     if not filepath or not os.path.exists(filepath):
@@ -51,8 +53,18 @@ def calculate_file_entropy(filepath: str, sample_size: int = DEFAULT_SAMPLE_SIZE
         if file_size == 0:
             return 0.0
 
+        chunk_size = 8192
         with open(filepath, 'rb') as f:
-            sample = f.read(min(sample_size, 1048576))  # Max 1MB bound
+            if file_size <= chunk_size * 3:  # <= 24KB
+                sample = f.read(min(sample_size, 1048576))  # Max 1MB bound
+            else:
+                # Tri-point multi-chunk sampling: read head, middle, and tail
+                head = f.read(chunk_size)
+                f.seek(file_size // 2 - chunk_size // 2)
+                mid = f.read(chunk_size)
+                f.seek(max(0, file_size - chunk_size))
+                tail = f.read(chunk_size)
+                sample = head + mid + tail
             return calculate_bytes_entropy(sample)
     except (PermissionError, FileNotFoundError, OSError):
         return 0.0
