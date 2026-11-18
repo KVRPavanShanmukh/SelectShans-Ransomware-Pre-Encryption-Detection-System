@@ -48,10 +48,8 @@ from psycopg2 import pool as pg_pool
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# JWT and utilities
-from jwt_utils import create_token, verify_token, refresh_token, token_required, decode_token_ignore_exp
 from admin_routes import register_admin_routes
-
+from jwt_utils import create_token, verify_token, token_required
 # PDF + Graph
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1820,43 +1818,8 @@ def extend_session():
     return jsonify({"error": "Session extension is disabled. Please log in again."}), 403
 
 @app.route('/api/token/refresh', methods=['POST'])
-def refresh_jwt_token():
-    """Standard token refresh within valid active session"""
-    auth_header = request.headers.get('Authorization', '')
-    token = None
-    
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:]
-    else:
-        data = request.get_json() or {}
-        token = data.get('token')
-    
-    if not token or token in ('null', 'undefined', ''):
-        return jsonify({"error": "Token required"}), 400
-    
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"error": "Token invalid or expired"}), 401
-    
-    user_id = payload.get('user_id')
-    with _session_activity_lock:
-        _active_user_last_seen[user_id] = datetime.now(timezone.utc)
-
-    new_token = refresh_token(token)
-    return jsonify({
-        "token": new_token,
-        "expires_in": 30 * 60
-    }), 200
-
-
-# =====================================================
-# GOOGLE OAUTH ENDPOINTS
-# =====================================================
-
-
-
-
-
+def disabled_token_refresh():
+    return jsonify({"error": "Token refresh is disabled."}), 403
 
 @app.route('/api/alerts', methods=['GET'])
 @token_required

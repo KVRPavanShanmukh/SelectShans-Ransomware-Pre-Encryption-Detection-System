@@ -27,7 +27,7 @@ const parseJwtExp = (token) => {
 const SessionManager = ({ jwtToken, onLogout }) => {
   const hasLoggedOutRef = useRef(false);
 
-  const resolveExpiryEpoch = useCallbackOrDirect = () => {
+  const resolveExpiryEpoch = () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const maxAllowedEpoch = nowSec + MAX_SESSION_SECONDS;
     const token = jwtToken || localStorage.getItem('jwtToken');
