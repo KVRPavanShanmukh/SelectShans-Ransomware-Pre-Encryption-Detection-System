@@ -225,30 +225,15 @@ function App() {
 
   if (isAdmin && adminViewMode === 'admin') {
     return (
-      <div className="app-container">
-        <main className="content-area" style={{ marginLeft: 0 }}>
-          <header className="top-nav">
-            <div className="search-bar">
-              <h2>SelectShans SOC Admin Control</h2>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => setAdminViewMode('threat_console')}
-                style={{ background: 'rgba(0,124,195,0.2)', border: '1px solid #007CC3', color: '#007CC3', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
-              >
-                Switch to Threat Console
-              </button>
-              <button
-                onClick={handleLogout}
-                style={{ background: '#ff4d4d', color: '#1a202c', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
-              >
-                Sign Out Admin
-              </button>
-            </div>
-          </header>
-          <div className="main-view">
+      <div className="app-container" style={{ background: '#060b16', minHeight: '100vh' }}>
+        <main className="content-area" style={{ marginLeft: 0, padding: 0, background: '#060b16' }}>
+          <div className="main-view" style={{ padding: 0 }}>
             <Suspense fallback={<TabLoading />}>
-              <AdminDashboard jwtToken={jwtToken} />
+              <AdminDashboard
+                jwtToken={jwtToken}
+                onSwitchToThreatConsole={() => setAdminViewMode('threat_console')}
+                onLogout={handleLogout}
+              />
             </Suspense>
           </div>
         </main>

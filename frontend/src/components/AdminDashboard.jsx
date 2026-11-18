@@ -1,200 +1,412 @@
 import { API_URL } from '../config';
-import React, { useState, useEffect } from 'react';
-import { Users, Shield, Clock, Search, ShieldAlert, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Users,
+  Shield,
+  Clock,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  CheckCircle,
+  XCircle,
+  Activity,
+  Zap,
+  Radio,
+  ExternalLink,
+  LogOut,
+  RefreshCw,
+  SlidersHorizontal
+} from 'lucide-react';
+import AdminTopology3D from './AdminTopology3D';
+import './AdminDashboard.css';
 
-const AdminDashboard = ({ jwtToken }) => {
+const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('all'); // 'all' or 'requests'
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'requests', or 'verified'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [hoveredUserId, setHoveredUserId] = useState(null);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const token = jwtToken || localStorage.getItem('jwtToken') || sessionStorage.getItem('jwtToken');
 
   useEffect(() => {
     fetchUsers();
-    const interval = setInterval(fetchUsers, 10000); // refresh every 10 seconds
+    const interval = setInterval(fetchUsers, 10000); // Poll fresh telemetry every 10s
     return () => clearInterval(interval);
   }, []);
 
   const fetchUsers = async () => {
     try {
       const response = await fetch(`${API_URL}/api/admin/users`, {
-        headers: { 'Authorization': `Bearer ${jwtToken}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
-        setUsers(data);
+        setUsers(Array.isArray(data) ? data : []);
+        setError(null);
       } else {
-        setError('Failed to fetch users');
+        setError('Failed to fetch administrator telemetry');
       }
     } catch (err) {
-      setError('Connection error');
+      setError('Connection error with security cluster');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    await fetchUsers();
+    setTimeout(() => setIsSyncing(false), 500);
+  };
+
   const toggleShikikanAccess = async (userId, currentAccess) => {
+    setActionLoadingId(userId);
     try {
       const response = await fetch(`${API_URL}/api/admin/users/${userId}/permissions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${jwtToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ shikikan_access: !currentAccess })
       });
       if (response.ok) {
-        fetchUsers();
+        await fetchUsers();
       }
     } catch (err) {
-      console.error('Error updating permissions');
+      console.error('Error updating permissions', err);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
-  const renderUserTable = (filteredUsers) => (
-    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 20 }}>
-      <thead>
-        <tr style={{ borderBottom: '2px solid #333', textAlign: 'left' }}>
-          <th style={{ padding: '12px' }}>Status</th>
-          <th style={{ padding: '12px' }}>Name / Username</th>
-          <th style={{ padding: '12px' }}>Email</th>
-          <th style={{ padding: '12px' }}>DOB</th>
-          <th style={{ padding: '12px' }}>Recent Activity</th>
-          <th style={{ padding: '12px' }}>Shiki-kan Access</th>
-          <th style={{ padding: '12px' }}>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {filteredUsers.length === 0 ? (
-          <tr>
-            <td colSpan="7" style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
-              No users found.
-            </td>
-          </tr>
-        ) : (
-          filteredUsers.map(user => {
-            const isOnline = user.is_online;
-            // Simple check: active within last 2 minutes
-            const lastActive = user.last_active ? new Date(user.last_active) : null;
-            const currentlyActive = isOnline && lastActive && (new Date() - lastActive) < 120000;
+  // Filter out system admins for normal endpoint topology & permission view
+  const standardUsers = useMemo(() => {
+    return users.filter(u => u.role !== 'admin');
+  }, [users]);
 
-            return (
-              <tr key={user.id} style={{ borderBottom: '1px solid #222' }}>
-                <td style={{ padding: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: currentlyActive ? '#00FF41' : '#555' }} />
-                    <span style={{ fontSize: '0.8rem', color: currentlyActive ? '#00FF41' : '#aaa' }}>
-                      {currentlyActive ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
-                </td>
-                <td style={{ padding: '12px' }}>{user.username}</td>
-                <td style={{ padding: '12px', fontSize: '0.85rem' }}>{user.email}</td>
-                <td style={{ padding: '12px', fontSize: '0.85rem' }}>{user.dob}</td>
-                <td style={{ padding: '12px', fontSize: '0.85rem', color: '#888' }}>
-                  {lastActive ? lastActive.toLocaleString() : 'Never'}
-                </td>
-                <td style={{ padding: '12px' }}>
-                  {user.shikikan_access ? (
-                    <span style={{ color: '#00FF41', display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={14}/> Granted</span>
-                  ) : (
-                    <span style={{ color: '#ff4d4d', display: 'flex', alignItems: 'center', gap: 4 }}><XCircle size={14}/> Denied</span>
-                  )}
-                  {user.shikikan_requested && !user.shikikan_access && (
-                    <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginTop: 4 }}>Requested Access!</div>
-                  )}
-                </td>
-                <td style={{ padding: '12px' }}>
-                  <button
-                    onClick={() => toggleShikikanAccess(user.id, user.shikikan_access)}
-                    style={{
-                      background: user.shikikan_access ? 'rgba(255, 77, 77, 0.2)' : 'rgba(0, 255, 65, 0.2)',
-                      color: user.shikikan_access ? '#ff4d4d' : '#00FF41',
-                      border: `1px solid ${user.shikikan_access ? '#ff4d4d' : '#00FF41'}`,
-                      padding: '6px 12px',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: '0.8rem'
-                    }}
-                  >
-                    {user.shikikan_access ? 'Revoke Access' : 'Grant Access'}
-                  </button>
-                </td>
-              </tr>
-            );
-          })
-        )}
-      </tbody>
-    </table>
-  );
+  // Derived KPI Counts
+  const requestedUsers = useMemo(() => {
+    return standardUsers.filter(u => u.shikikan_requested && !u.shikikan_access);
+  }, [standardUsers]);
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading Admin Data...</div>;
-  if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#ff4d4d' }}>{error}</div>;
+  const verifiedUsers = useMemo(() => {
+    return standardUsers.filter(u => u.shikikan_access);
+  }, [standardUsers]);
 
-  const standardUsers = users.filter(u => u.role !== 'admin');
-  const requestedUsers = standardUsers.filter(u => u.shikikan_requested && !u.shikikan_access);
+  const onlineEndpoints = useMemo(() => {
+    return standardUsers.filter(u => u.is_online);
+  }, [standardUsers]);
+
+  // Search & Tab filtered dataset
+  const filteredUsers = useMemo(() => {
+    let dataset = standardUsers;
+    if (activeTab === 'requests') {
+      dataset = requestedUsers;
+    } else if (activeTab === 'verified') {
+      dataset = verifiedUsers;
+    }
+
+    if (!searchQuery.trim()) return dataset;
+    const q = searchQuery.toLowerCase().trim();
+    return dataset.filter(u =>
+      (u.username && u.username.toLowerCase().includes(q)) ||
+      (u.email && u.email.toLowerCase().includes(q)) ||
+      (u.dob && String(u.dob).includes(q))
+    );
+  }, [standardUsers, requestedUsers, verifiedUsers, activeTab, searchQuery]);
+
+  const handleConsoleSwitch = () => {
+    if (typeof onSwitchToThreatConsole === 'function') {
+      onSwitchToThreatConsole();
+    } else {
+      sessionStorage.setItem('admin_view_mode', 'threat_console');
+      window.location.reload();
+    }
+  };
+
+  const handleAdminSignOut = () => {
+    if (typeof onLogout === 'function') {
+      onLogout();
+    } else {
+      sessionStorage.clear();
+      localStorage.clear();
+      window.location.href = '/';
+    }
+  };
+
+  if (loading && users.length === 0) {
+    return (
+      <div className="admin-soc-deck">
+        <div className="admin-loading-spinner">
+          <Activity size={32} className="spin-icon" color="#00ffcc" />
+          <span>Synchronizing 3D SOC Topology & User Telemetry...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '20px 40px' }}>
-      <div style={{ display: 'flex', gap: 20, marginBottom: 30 }}>
-        <div style={{ flex: 1, background: '#111', padding: 20, borderRadius: 8, borderLeft: '4px solid #00FF41' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#00FF41', marginBottom: 10 }}>
-            <Users size={24} />
-            <h3 style={{ margin: 0 }}>Total Users</h3>
+    <div className="admin-soc-deck">
+      {/* 1. Tactical Command Header Strip */}
+      <div className="admin-header-strip">
+        <div className="admin-title-badge">
+          <div className="admin-title-icon">
+            <Radio size={20} color="#00ffcc" />
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{standardUsers.length}</div>
+          <div className="admin-title-text">
+            <h1>SelectShans SOC Admin Control</h1>
+            <span>3D Endpoint Topology & RBAC Command Deck</span>
+          </div>
         </div>
-        
-        <div style={{ flex: 1, background: '#111', padding: 20, borderRadius: 8, borderLeft: '4px solid #ff4d4d' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#ff4d4d', marginBottom: 10 }}>
-            <ShieldAlert size={24} />
-            <h3 style={{ margin: 0 }}>Pending Shiki-kan Requests</h3>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{requestedUsers.length}</div>
+
+        <div className="admin-quick-actions">
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="admin-action-btn secondary"
+            title="Refresh Live Telemetry"
+          >
+            <RefreshCw size={14} className={isSyncing ? "spin-icon" : ""} />
+            <span>{isSyncing ? "Syncing..." : "Sync"}</span>
+          </button>
+          <button
+            onClick={handleConsoleSwitch}
+            className="admin-action-btn secondary"
+            title="Switch to Realtime Threat Console"
+          >
+            <ExternalLink size={14} />
+            <span>Threat Console</span>
+          </button>
+          <button
+            onClick={handleAdminSignOut}
+            className="admin-action-btn danger"
+            title="Sign out of SOC Admin Session"
+          >
+            <LogOut size={14} />
+            <span>Sign Out</span>
+          </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <button
-          onClick={() => setActiveTab('all')}
-          style={{
-            padding: '10px 20px',
-            background: activeTab === 'all' ? '#222' : 'transparent',
-            border: '1px solid #333',
-            color: activeTab === 'all' ? '#fff' : '#888',
-            cursor: 'pointer',
-            borderRadius: 4
-          }}
-        >
-          All Users
-        </button>
-        <button
-          onClick={() => setActiveTab('requests')}
-          style={{
-            padding: '10px 20px',
-            background: activeTab === 'requests' ? '#222' : 'transparent',
-            border: '1px solid #333',
-            color: activeTab === 'requests' ? '#ff4d4d' : '#888',
-            cursor: 'pointer',
-            borderRadius: 4,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}
-        >
-          Shiki-kan Requests
-          {requestedUsers.length > 0 && (
-            <span style={{ background: '#ff4d4d', color: '#1a202c', borderRadius: '50%', padding: '2px 6px', fontSize: '0.7rem' }}>
+      {/* 2. Interactive 3D Isometric Endpoint & SOC Topology Hero Deck */}
+      <div className="admin-topology-hero">
+        <AdminTopology3D
+          users={standardUsers}
+          selectedUserId={selectedUserId}
+          hoveredUserId={hoveredUserId}
+          onSelectUser={(userId) => setSelectedUserId(userId === selectedUserId ? null : userId)}
+          onHoverUser={(userId) => setHoveredUserId(userId)}
+        />
+      </div>
+
+      {/* 3. High-Contrast Tactical KPI Grid */}
+      <div className="admin-kpi-grid">
+        <div className="admin-kpi-card kpi-cyan">
+          <div className="admin-kpi-header">
+            <span className="admin-kpi-label">Total Endpoints</span>
+            <div className="admin-kpi-icon-wrap">
+              <Users size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">{standardUsers.length}</div>
+          <div className="admin-kpi-caption">
+            <Activity size={12} color="#00ffcc" />
+            Registered host machines & operators
+          </div>
+        </div>
+
+        <div className="admin-kpi-card kpi-amber">
+          <div className="admin-kpi-header">
+            <span className="admin-kpi-label">Pending Shiki-kan</span>
+            <div className="admin-kpi-icon-wrap">
+              <ShieldAlert size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">{requestedUsers.length}</div>
+          <div className="admin-kpi-caption">
+            <Clock size={12} color="#f59e0b" />
+            Awaiting administrator approval
+          </div>
+        </div>
+
+        <div className="admin-kpi-card kpi-emerald">
+          <div className="admin-kpi-header">
+            <span className="admin-kpi-label">Verified Operators</span>
+            <div className="admin-kpi-icon-wrap">
+              <ShieldCheck size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">{verifiedUsers.length}</div>
+          <div className="admin-kpi-caption">
+            <CheckCircle size={12} color="#10b981" />
+            Active step-up Shiki-kan clearance
+          </div>
+        </div>
+
+        <div className="admin-kpi-card kpi-sky">
+          <div className="admin-kpi-header">
+            <span className="admin-kpi-label">Online Active Nodes</span>
+            <div className="admin-kpi-icon-wrap">
+              <Zap size={18} />
+            </div>
+          </div>
+          <div className="admin-kpi-value">{onlineEndpoints.length}</div>
+          <div className="admin-kpi-caption">
+            <span className="node-status-dot online" style={{ margin: 0 }} />
+            Transmitting live heartbeat to SOC
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Controls Strip: Filter Tabs + Search Bar */}
+      <div className="admin-table-controls">
+        <div className="admin-tabs-group">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`admin-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+          >
+            <span>All Endpoints</span>
+            <span className="admin-tab-count">{standardUsers.length}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`admin-tab-btn ${activeTab === 'requests' ? 'active' : ''}`}
+          >
+            <span>Access Requests</span>
+            <span className="admin-tab-count" style={{ background: requestedUsers.length > 0 ? '#f59e0b' : undefined, color: requestedUsers.length > 0 ? '#060b16' : undefined }}>
               {requestedUsers.length}
             </span>
-          )}
-        </button>
+          </button>
+          <button
+            onClick={() => setActiveTab('verified')}
+            className={`admin-tab-btn ${activeTab === 'verified' ? 'active' : ''}`}
+          >
+            <span>Verified Shiki-kan</span>
+            <span className="admin-tab-count">{verifiedUsers.length}</span>
+          </button>
+        </div>
+
+        <div className="admin-search-wrap">
+          <Search size={16} className="admin-search-icon" />
+          <input
+            type="text"
+            placeholder="Search by username, email, or DOB..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="admin-search-input"
+          />
+        </div>
       </div>
 
-      <div style={{ background: '#111', padding: 20, borderRadius: 8 }}>
-        <h3 style={{ margin: '0 0 15px 0', color: '#ccc' }}>
-          {activeTab === 'all' ? 'User Monitoring & Permissions' : 'Pending Access Requests'}
-        </h3>
-        {renderUserTable(activeTab === 'all' ? standardUsers : requestedUsers)}
+      {/* 5. User Monitoring & Permissions Table Deck */}
+      <div className="admin-table-deck">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Operator / Username</th>
+              <th>Registered Email</th>
+              <th>DOB Token</th>
+              <th>Last Seen Activity</th>
+              <th>Shiki-kan Privilege</th>
+              <th style={{ textAlign: 'right' }}>Authorization Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="admin-empty-state">
+                  No endpoint operators match current filter criteria.
+                </td>
+              </tr>
+            ) : (
+              filteredUsers.map((user) => {
+                const isOnline = Boolean(user.is_online);
+                const lastActive = user.last_active ? new Date(user.last_active) : null;
+                const isSelected = selectedUserId === user.id;
+                const isHovered = hoveredUserId === user.id;
+
+                let statusPillClass = 'none';
+                let statusPillText = 'Standard User';
+                if (user.shikikan_access) {
+                  statusPillClass = 'verified';
+                  statusPillText = 'Verified Shiki-kan';
+                } else if (user.shikikan_requested) {
+                  statusPillClass = 'pending';
+                  statusPillText = 'Pending Approval';
+                }
+
+                return (
+                  <tr
+                    key={user.id}
+                    className={`admin-table-row ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setSelectedUserId(isSelected ? null : user.id)}
+                    onMouseEnter={() => setHoveredUserId(user.id)}
+                    onMouseLeave={() => setHoveredUserId(null)}
+                    style={{
+                      background: isHovered ? 'rgba(0, 255, 204, 0.08)' : undefined
+                    }}
+                  >
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span className={`node-status-dot ${isOnline ? 'online' : 'offline'}`} />
+                        <span style={{ fontSize: '0.74rem', color: isOnline ? '#10b981' : '#64748b', fontWeight: 600 }}>
+                          {isOnline ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                        {user.username}
+                      </div>
+                    </td>
+                    <td style={{ color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.78rem' }}>
+                      {user.email}
+                    </td>
+                    <td style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>
+                      {user.dob || '—'}
+                    </td>
+                    <td style={{ color: '#64748b', fontSize: '0.76rem' }}>
+                      {lastActive ? lastActive.toLocaleString() : 'Never Active'}
+                    </td>
+                    <td>
+                      <span className={`shikikan-pill ${statusPillClass}`}>
+                        {user.shikikan_access ? <ShieldCheck size={12} /> : user.shikikan_requested ? <ShieldAlert size={12} /> : <Shield size={12} />}
+                        {statusPillText}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        disabled={actionLoadingId === user.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleShikikanAccess(user.id, user.shikikan_access);
+                        }}
+                        className={`admin-row-action-btn ${user.shikikan_access ? 'revoke' : 'approve'}`}
+                      >
+                        {actionLoadingId === user.id ? (
+                          'Updating...'
+                        ) : user.shikikan_access ? (
+                          'Revoke Clearance'
+                        ) : user.shikikan_requested ? (
+                          'Approve Shiki-kan'
+                        ) : (
+                          'Grant Clearance'
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
