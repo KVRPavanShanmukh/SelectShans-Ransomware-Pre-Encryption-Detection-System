@@ -1,179 +1,211 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import {
   RotateCcw,
+  Compass,
+  Crosshair,
+  AlertTriangle,
   Play,
   Pause,
-  ShieldCheck,
-  ShieldAlert,
-  Server,
-  Cpu,
   Layers,
   Radio,
-  Sparkles
+  Zap,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 
 /**
- * 1080p High-Fidelity 3D Isometric Endpoint & SOC Node Topology
- * Procedural Three.js Cyber Citadel, Subsystem Sentinels, Realtime User Endpoints,
- * High-Speed Luminous Data Conduits, and Atmospheric Holographic Particle Cloud.
- * Zero external binary assets (.glb/.obj) - 100% procedural WebGL.
+ * Studio-Grade Interactive 3D Isometric SOC & Endpoint Cyber-Topology
+ * Modeled after Active Theory and Cloudflare Radar network visualizations.
+ * Built with procedural Three.js architecture, UnrealBloomPass post-processing,
+ * CatmullRom curved 3D fiber-optic conduits, projected 2D HUD tags, and camera fly-to.
  */
 const AdminTopology3D = ({
   users = [],
   selectedUserId = null,
   hoveredUserId = null,
+  flyToUserId = null,
   onSelectUser = () => {},
   onHoverUser = () => {}
 }) => {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
+  const composerRef = useRef(null);
   const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
   const animFrameIdRef = useRef(null);
   const nodesMapRef = useRef(new Map());
   const packetsRef = useRef([]);
   const coreAnimRef = useRef({});
+  const radarWaveRef = useRef(null);
   const spotlightRef = useRef(null);
-  const particlesRef = useRef(null);
+  const dustParticlesRef = useRef(null);
+  const flyToTargetRef = useRef(null);
   const autoRotateRef = useRef(true);
 
-  // High-Precision Camera Orbit & Smooth Damping State
-  const camState = useRef({
-    isDragging: false,
-    prevX: 0,
-    prevY: 0,
-    theta: Math.PI / 4,
-    phi: Math.PI / 3.4,
-    radius: 23,
-    targetTheta: Math.PI / 4,
-    targetPhi: Math.PI / 3.4,
-    targetRadius: 23,
-    minRadius: 14,
-    maxRadius: 40,
-    minPhi: 0.2,
-    maxPhi: Math.PI / 2.05
-  });
-
   const [autoRotate, setAutoRotate] = useState(true);
-  const [tooltip, setTooltip] = useState({
-    visible: false,
-    x: 0,
-    y: 0,
-    node: null
-  });
+  const [activePreset, setActivePreset] = useState('iso');
+  const [projectedLabels, setProjectedLabels] = useState([]);
+  const [hoveredNodeData, setHoveredNodeData] = useState(null);
 
-  // Always produce a richly populated, balanced enterprise topology
-  // Merging real users with dedicated SOC perimeter infrastructure nodes
+  // Build a rich, balanced 3D topology dataset
   const topologyNodes = React.useMemo(() => {
     const list = [];
 
-    // 1. Dedicated SOC Infrastructure Sentinels
-    list.push({
-      id: 'infra-firewall',
-      name: 'Gateway Sentinel Alpha',
-      type: 'infra',
-      roleText: 'Perimeter Deep-Packet Inspection',
-      status: 'Active Defense',
-      color: 0x38bdf8,
-      isOnline: true,
-      load: '99.4%'
-    });
-    list.push({
-      id: 'infra-entropy',
-      name: 'Entropy Surge Analyzer',
-      type: 'infra',
-      roleText: 'Shannon Pre-Encryption Engine',
-      status: 'Monitoring',
-      color: 0x00ffcc,
-      isOnline: true,
-      load: 'Active'
-    });
-    list.push({
-      id: 'infra-canary',
-      name: 'Canary Decoy Array Prime',
-      type: 'infra',
-      roleText: 'Zero-Tamper Tripwire Net',
-      status: '3 Decoys Armed',
-      color: 0x10b981,
-      isOnline: true,
-      load: 'Armed'
-    });
-    list.push({
-      id: 'infra-heuristic',
-      name: 'Heuristic Threat Oracle',
-      type: 'infra',
-      roleText: 'Sysmon & Process Risk Scoring',
-      status: 'Synchronized',
-      color: 0x818cf8,
-      isOnline: true,
-      load: 'Nominal'
-    });
-
-    // 2. Real User Endpoints from PostgreSQL
+    // Real registered user endpoints
     users.forEach((u) => {
       list.push({
         id: u.id,
         name: u.username || `User-${u.id}`,
         email: u.email,
         type: 'endpoint',
-        roleText: u.shikikan_access
-          ? 'Shiki-kan Verified Operator'
-          : u.shikikan_requested
-          ? 'Pending Shiki-kan Approval'
-          : 'Standard Endpoint Operator',
         isShikikan: Boolean(u.shikikan_access),
         isPending: Boolean(u.shikikan_requested && !u.shikikan_access),
         isOnline: Boolean(u.is_online),
         dob: u.dob,
         lastActive: u.last_active,
         color: u.shikikan_access
-          ? 0x10b981
+          ? 0x00ffcc
           : u.shikikan_requested
-          ? 0xf59e0b
-          : 0x3b82f6,
+          ? 0xff3b5c
+          : 0x38bdf8,
         rawUser: u
       });
     });
 
+    // If total endpoints is small, complement with Enterprise SOC Sentinel Nodes
+    if (list.length < 5) {
+      const standbys = [
+        {
+          id: 'infra-gateway',
+          name: 'Gateway Sentinel Alpha',
+          type: 'sentinel',
+          roleText: 'Deep-Packet Filter',
+          color: 0x38bdf8,
+          isOnline: true
+        },
+        {
+          id: 'infra-entropy',
+          name: 'Entropy Surge Analyzer',
+          type: 'sentinel',
+          roleText: 'Pre-Encryption Engine',
+          color: 0x00ffcc,
+          isOnline: true
+        },
+        {
+          id: 'infra-canary',
+          name: 'Canary Array Prime',
+          type: 'sentinel',
+          roleText: 'Zero-Tamper Decoys',
+          color: 0x10b981,
+          isOnline: true
+        },
+        {
+          id: 'infra-threat',
+          name: 'Threat Oracle Delta',
+          type: 'sentinel',
+          roleText: 'Behavioral Risk ML',
+          color: 0x818cf8,
+          isOnline: true
+        }
+      ];
+
+      standbys.slice(0, 5 - list.length).forEach((sb) => list.push(sb));
+    }
+
     return list;
   }, [users]);
 
-  const handleResetCamera = useCallback(() => {
-    camState.current.targetTheta = Math.PI / 4;
-    camState.current.targetPhi = Math.PI / 3.4;
-    camState.current.targetRadius = 23;
+  // Smooth Camera Fly-To Trigger
+  const triggerCameraFlyTo = useCallback((targetPosition, targetLookAt = new THREE.Vector3(0, 1.2, 0)) => {
+    if (!controlsRef.current || !cameraRef.current) return;
+    controlsRef.current.autoRotate = false;
+    setAutoRotate(false);
+    autoRotateRef.current = false;
+
+    flyToTargetRef.current = {
+      camPos: targetPosition.clone(),
+      lookAt: targetLookAt.clone(),
+      progress: 0
+    };
   }, []);
 
-  const toggleAutoRotate = () => {
+  // Camera Preset Views
+  const applyPresetView = (presetKey) => {
+    setActivePreset(presetKey);
+    if (!cameraRef.current || !controlsRef.current) return;
+
+    if (presetKey === 'iso') {
+      triggerCameraFlyTo(new THREE.Vector3(20, 18, 20), new THREE.Vector3(0, 1.2, 0));
+    } else if (presetKey === 'radar') {
+      triggerCameraFlyTo(new THREE.Vector3(0.01, 30, 0), new THREE.Vector3(0, 0, 0));
+    } else if (presetKey === 'pending') {
+      const pendingNode = topologyNodes.find((n) => n.isPending);
+      if (pendingNode && nodesMapRef.current.has(pendingNode.id)) {
+        const item = nodesMapRef.current.get(pendingNode.id);
+        const nodePos = item.group.position;
+        triggerCameraFlyTo(
+          new THREE.Vector3(nodePos.x * 1.5, nodePos.y + 7, nodePos.z * 1.5),
+          new THREE.Vector3(nodePos.x, nodePos.y + 1, nodePos.z)
+        );
+        onSelectUser(pendingNode.id);
+      } else {
+        triggerCameraFlyTo(new THREE.Vector3(18, 16, 18), new THREE.Vector3(0, 1, 0));
+      }
+    }
+  };
+
+  const toggleOrbitMode = () => {
     setAutoRotate((prev) => {
-      autoRotateRef.current = !prev;
-      return !prev;
+      const next = !prev;
+      autoRotateRef.current = next;
+      if (controlsRef.current) controlsRef.current.autoRotate = next;
+      return next;
     });
   };
 
+  // Listen to external fly-to requests from parent table
+  useEffect(() => {
+    if (flyToUserId && nodesMapRef.current.has(flyToUserId)) {
+      const item = nodesMapRef.current.get(flyToUserId);
+      const pos = item.group.position;
+      triggerCameraFlyTo(
+        new THREE.Vector3(pos.x * 1.45, pos.y + 6.5, pos.z * 1.45),
+        new THREE.Vector3(pos.x, pos.y + 1.2, pos.z)
+      );
+    }
+  }, [flyToUserId, triggerCameraFlyTo]);
+
+  // Main Three.js Setup & Post-Processing Loop
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 900;
-    const height = container.clientHeight || 450;
+    const width = container.clientWidth || 960;
+    const height = container.clientHeight || 460;
 
-    // 1. Scene & Deep Space Tactical Backdrop
+    // 1. Scene & Deep Space Environment
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.background = new THREE.Color(0x060b16);
-    scene.fog = new THREE.FogExp2(0x060b16, 0.022);
+    scene.background = new THREE.Color(0x04070f);
+    scene.fog = new THREE.FogExp2(0x04070f, 0.022);
 
-    // 2. Camera: Framed Isometric Perspective (FOV 42)
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.5, 500);
+    // 2. Camera Setup (Perspective Isometric)
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 600);
+    camera.position.set(20, 18, 20);
     cameraRef.current = camera;
 
-    // 3. WebGLRenderer with Antialiasing & Soft Shadows
+    // 3. WebGLRenderer
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      stencil: false
     });
     rendererRef.current = renderer;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -181,256 +213,274 @@ const AdminTopology3D = ({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.2;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    // 4. Studio Tactical Lighting Rig
-    const ambLight = new THREE.AmbientLight(0x0b192c, 2.2);
+    // 4. UnrealBloomPass Studio Glow Post-Processing
+    const composer = new EffectComposer(renderer);
+    composerRef.current = composer;
+
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(width, height),
+      0.85, // Bloom Strength
+      0.45, // Bloom Radius
+      0.22  // Bloom Threshold
+    );
+    composer.addPass(bloomPass);
+
+    // 5. OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controlsRef.current = controls;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = autoRotateRef.current;
+    controls.autoRotateSpeed = 0.6;
+    controls.minDistance = 12;
+    controls.maxDistance = 42;
+    controls.minPolarAngle = 0.2;
+    controls.maxPolarAngle = Math.PI / 2.05;
+    controls.target.set(0, 1.2, 0);
+
+    controls.addEventListener('start', () => {
+      // Pause auto-rotation when user actively grabs the scene
+      controls.autoRotate = false;
+      setAutoRotate(false);
+      autoRotateRef.current = false;
+    });
+
+    // 6. Three-Point Cyber Lighting Rig
+    const ambLight = new THREE.HemisphereLight(0x0d253f, 0x04070f, 2.0);
     scene.add(ambLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0x00ffcc, 2.0);
-    dirLight1.position.set(20, 30, 20);
-    dirLight1.castShadow = true;
-    dirLight1.shadow.mapSize.width = 1024;
-    dirLight1.shadow.mapSize.height = 1024;
-    scene.add(dirLight1);
+    const dirRim = new THREE.DirectionalLight(0x4338ca, 1.4);
+    dirRim.position.set(-25, 20, -25);
+    scene.add(dirRim);
 
-    const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 1.2);
-    dirLight2.position.set(-20, 20, -20);
-    scene.add(dirLight2);
+    const dirKey = new THREE.DirectionalLight(0x00ffcc, 1.8);
+    dirKey.position.set(25, 35, 25);
+    dirKey.castShadow = true;
+    dirKey.shadow.mapSize.width = 1024;
+    dirKey.shadow.mapSize.height = 1024;
+    scene.add(dirKey);
 
-    const centralCoreLight = new THREE.PointLight(0x00ffcc, 4.0, 35, 1.3);
-    centralCoreLight.position.set(0, 2.6, 0);
-    scene.add(centralCoreLight);
-    coreAnimRef.current.coreLight = centralCoreLight;
+    const coreLight = new THREE.PointLight(0x00ffcc, 4.5, 30, 1.4);
+    coreLight.position.set(0, 2.6, 0);
+    scene.add(coreLight);
+    coreAnimRef.current.coreLight = coreLight;
 
-    const spot = new THREE.SpotLight(0x00ffcc, 0, 30, Math.PI / 5, 0.35, 1);
-    spot.position.set(0, 16, 0);
+    const spot = new THREE.SpotLight(0x00ffcc, 0, 35, Math.PI / 4, 0.4, 1);
+    spot.position.set(0, 18, 0);
     scene.add(spot);
     spotlightRef.current = spot;
 
-    // 5. High-Definition Cyber Floor with Glowing Circuit Rings
-    const grid = new THREE.GridHelper(44, 32, 0x00ffcc, 0x0f2942);
-    grid.position.y = -0.01;
-    scene.add(grid);
+    // 7. Multi-Layered Cyber Floor
+    const primaryGrid = new THREE.GridHelper(48, 36, 0x00ffcc, 0x0d253f);
+    primaryGrid.position.y = -0.01;
+    scene.add(primaryGrid);
 
-    // Concentric Cyber Radar Rings
-    [6.5, 11.5, 16.5].forEach((rad, i) => {
-      const ringGeo = new THREE.RingGeometry(rad - 0.05, rad + 0.05, 96);
+    // Static Concentric Range Rings
+    [6.5, 12, 17.5].forEach((r, i) => {
+      const ringGeo = new THREE.RingGeometry(r - 0.04, r + 0.04, 96);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: i === 0 ? 0x00ffcc : i === 1 ? 0x38bdf8 : 0x0f2942,
+        color: i === 0 ? 0x00ffcc : i === 1 ? 0x38bdf8 : 0x0d253f,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: i === 0 ? 0.45 : i === 1 ? 0.35 : 0.2
+        opacity: i === 0 ? 0.45 : i === 1 ? 0.35 : 0.22
       });
       const ring = new THREE.Mesh(ringGeo, ringMat);
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.015;
+      ring.position.y = 0.012;
       scene.add(ring);
     });
 
-    // 6. Central SelectShans Quantum SOC Citadel (High-Poly Procedural Fortress)
-    const citadelGroup = new THREE.Group();
+    // Expanding Pulsing Radar Range Ring
+    const radarGeo = new THREE.RingGeometry(0.5, 0.7, 64);
+    const radarMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffcc,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.6
+    });
+    const radarWave = new THREE.Mesh(radarGeo, radarMat);
+    radarWave.rotation.x = Math.PI / 2;
+    radarWave.position.y = 0.016;
+    scene.add(radarWave);
+    radarWaveRef.current = radarWave;
 
-    // Plinth Level 1: Armored Foundation with Chamfer
+    // 8. 600 Floating Ambient Data-Dust Particles
+    const dustCount = 600;
+    const dustPos = new Float32Array(dustCount * 3);
+    for (let i = 0; i < dustCount * 3; i += 3) {
+      dustPos[i] = (Math.random() - 0.5) * 50;
+      dustPos[i + 1] = Math.random() * 16;
+      dustPos[i + 2] = (Math.random() - 0.5) * 50;
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({
+      color: 0x00ffcc,
+      size: 0.16,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending
+    });
+    const dust = new THREE.Points(dustGeo, dustMat);
+    scene.add(dust);
+    dustParticlesRef.current = dust;
+
+    // 9. Central SelectShans SOC Core Architectural Monument
+    const coreGroup = new THREE.Group();
+
+    // Dark-titanium base plinth with glowing cyan trim
     const plinthMat = new THREE.MeshStandardMaterial({
-      color: 0x0a1626,
-      metalness: 0.88,
-      roughness: 0.18,
-      emissive: 0x021b29,
-      emissiveIntensity: 0.6
+      color: 0x081320,
+      metalness: 0.92,
+      roughness: 0.14,
+      emissive: 0x011b2b,
+      emissiveIntensity: 0.7
     });
-    const basePlinth = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.0, 0.5, 8), plinthMat);
-    basePlinth.position.y = 0.25;
-    citadelGroup.add(basePlinth);
+    const baseCylinder = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.0, 0.5, 8), plinthMat);
+    baseCylinder.position.y = 0.25;
+    coreGroup.add(baseCylinder);
 
-    // Plinth Level 2: Octagonal Command Deck
-    const deckMat = new THREE.MeshStandardMaterial({
-      color: 0x0e2338,
-      metalness: 0.9,
-      roughness: 0.15,
-      emissive: 0x003b46,
-      emissiveIntensity: 0.5
-    });
-    const deckPlinth = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.9, 0.6, 8), deckMat);
-    deckPlinth.position.y = 0.75;
-    citadelGroup.add(deckPlinth);
+    // Glowing cyan trim disc on base
+    const trimDisc = new THREE.Mesh(
+      new THREE.RingGeometry(3.6, 3.8, 48),
+      new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide })
+    );
+    trimDisc.rotation.x = Math.PI / 2;
+    trimDisc.position.y = 0.51;
+    coreGroup.add(trimDisc);
 
-    // 8 Server Blades / Guard Pillars surrounding the deck
+    // Mid-tier server battery ring with 8 server pillars
     for (let p = 0; p < 8; p++) {
       const ang = (p / 8) * Math.PI * 2;
-      const px = Math.cos(ang) * 2.5;
-      const pz = Math.sin(ang) * 2.5;
-      const pillarGeo = new THREE.BoxGeometry(0.35, 1.1, 0.35);
-      const pillarMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        metalness: 0.85,
+      const px = Math.cos(ang) * 2.55;
+      const pz = Math.sin(ang) * 2.55;
+      const bladeGeo = new THREE.BoxGeometry(0.35, 1.15, 0.35);
+      const bladeMat = new THREE.MeshStandardMaterial({
+        color: 0x0f1d30,
+        metalness: 0.88,
         roughness: 0.2,
         emissive: 0x00ffcc,
         emissiveIntensity: 0.35
       });
-      const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-      pillar.position.set(px, 0.8, pz);
-      citadelGroup.add(pillar);
+      const blade = new THREE.Mesh(bladeGeo, bladeMat);
+      blade.position.set(px, 0.85, pz);
+      coreGroup.add(blade);
 
-      // Blinking status beacon LED on top
-      const ledGeo = new THREE.SphereGeometry(0.08, 8, 8);
-      const ledMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
-      const led = new THREE.Mesh(ledGeo, ledMat);
-      led.position.set(px, 1.4, pz);
-      citadelGroup.add(led);
+      // Blinking status beacon LED on each pillar
+      const led = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ffcc })
+      );
+      led.position.set(px, 1.48, pz);
+      coreGroup.add(led);
     }
 
-    // Central Floating Quantum Core (Faceted Octahedron)
-    const coreCrystalGeo = new THREE.OctahedronGeometry(1.2, 0);
-    const coreCrystalMat = new THREE.MeshStandardMaterial({
+    // Levitating central rotating crystal core
+    const crystalGeo = new THREE.OctahedronGeometry(1.2, 0);
+    const crystalMat = new THREE.MeshStandardMaterial({
       color: 0x00ffcc,
       emissive: 0x00ffcc,
-      emissiveIntensity: 0.95,
+      emissiveIntensity: 0.98,
       metalness: 0.95,
-      roughness: 0.08
+      roughness: 0.05
     });
-    const coreCrystal = new THREE.Mesh(coreCrystalGeo, coreCrystalMat);
-    coreCrystal.position.y = 2.4;
-    citadelGroup.add(coreCrystal);
-    coreAnimRef.current.crystal = coreCrystal;
+    const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+    crystal.position.y = 2.45;
+    coreGroup.add(crystal);
+    coreAnimRef.current.crystal = crystal;
 
-    // Holographic Wireframe Containment Shield
-    const cageGeo = new THREE.IcosahedronGeometry(1.8, 0);
+    // Counter-rotating outer wireframe cage
+    const cageGeo = new THREE.IcosahedronGeometry(1.85, 0);
     const cageMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       wireframe: true,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.55
     });
-    const cageMesh = new THREE.Mesh(cageGeo, cageMat);
-    cageMesh.position.y = 2.4;
-    citadelGroup.add(cageMesh);
-    coreAnimRef.current.cage = cageMesh;
+    const cage = new THREE.Mesh(cageGeo, cageMat);
+    cage.position.y = 2.45;
+    coreGroup.add(cage);
+    coreAnimRef.current.cage = cage;
 
-    // Outer Gyro-Rings
+    // Three tilted orbital gyroscope scanner rings
     const ring1 = new THREE.Mesh(
       new THREE.TorusGeometry(3.1, 0.045, 12, 64),
       new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.85 })
     );
     ring1.rotation.x = Math.PI / 3;
-    ring1.position.y = 2.4;
-    citadelGroup.add(ring1);
+    ring1.position.y = 2.45;
+    coreGroup.add(ring1);
     coreAnimRef.current.ring1 = ring1;
 
     const ring2 = new THREE.Mesh(
-      new THREE.TorusGeometry(2.4, 0.04, 12, 48),
-      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 })
+      new THREE.TorusGeometry(2.5, 0.04, 12, 48),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.75 })
     );
     ring2.rotation.y = Math.PI / 4;
-    ring2.position.y = 2.4;
-    citadelGroup.add(ring2);
+    ring2.position.y = 2.45;
+    coreGroup.add(ring2);
     coreAnimRef.current.ring2 = ring2;
 
-    // Vertical Energy Stream Column
-    const beamGeo = new THREE.CylinderGeometry(0.12, 0.28, 7.5, 16, 1, true);
+    const ring3 = new THREE.Mesh(
+      new THREE.TorusGeometry(1.9, 0.035, 12, 40),
+      new THREE.MeshBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.7 })
+    );
+    ring3.rotation.z = Math.PI / 2.5;
+    ring3.position.y = 2.45;
+    coreGroup.add(ring3);
+    coreAnimRef.current.ring3 = ring3;
+
+    // Vertical holographic light beam column
+    const beamGeo = new THREE.CylinderGeometry(0.14, 0.35, 8.5, 16, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0x00ffcc,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.32,
       side: THREE.DoubleSide
     });
     const beam = new THREE.Mesh(beamGeo, beamMat);
-    beam.position.y = 5.2;
-    citadelGroup.add(beam);
+    beam.position.y = 5.8;
+    coreGroup.add(beam);
     coreAnimRef.current.beam = beam;
 
-    scene.add(citadelGroup);
+    scene.add(coreGroup);
 
-    // 7. Atmospheric Floating Holographic Data Particles (500 Particles)
-    const particleCount = 500;
-    const particlePositions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      particlePositions[i] = (Math.random() - 0.5) * 46;
-      particlePositions[i + 1] = Math.random() * 14;
-      particlePositions[i + 2] = (Math.random() - 0.5) * 46;
-    }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0x00ffcc,
-      size: 0.16,
-      transparent: true,
-      opacity: 0.65,
-      blending: THREE.AdditiveBlending
-    });
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
-    particlesRef.current = particles;
-
-    // 8. Raycasting & Smooth Orbit Pointer Listeners
+    // 10. Raycasting & Interaction Events
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-
-    const onPointerDown = (e) => {
-      if (e.button === 0) {
-        camState.current.isDragging = true;
-        camState.current.prevX = e.clientX;
-        camState.current.prevY = e.clientY;
-      }
-    };
 
     const onPointerMove = (e) => {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-      if (camState.current.isDragging) {
-        const deltaX = e.clientX - camState.current.prevX;
-        const deltaY = e.clientY - camState.current.prevY;
-        camState.current.prevX = e.clientX;
-        camState.current.prevY = e.clientY;
+      raycaster.setFromCamera(mouse, camera);
+      const hitMeshes = [];
+      nodesMapRef.current.forEach((val) => {
+        if (val.hitMesh) hitMeshes.push(val.hitMesh);
+      });
 
-        camState.current.targetTheta -= deltaX * 0.007;
-        camState.current.targetPhi = Math.max(
-          camState.current.minPhi,
-          Math.min(camState.current.maxPhi, camState.current.targetPhi - deltaY * 0.007)
-        );
-      } else {
-        raycaster.setFromCamera(mouse, camera);
-        const hitMeshes = [];
-        nodesMapRef.current.forEach((val) => {
-          if (val.hitMesh) hitMeshes.push(val.hitMesh);
-        });
-
-        const intersects = raycaster.intersectObjects(hitMeshes, false);
-        if (intersects.length > 0) {
-          const nodeData = intersects[0].object.userData?.node;
-          if (nodeData) {
-            container.style.cursor = 'pointer';
-            setTooltip({
-              visible: true,
-              x: e.clientX - rect.left,
-              y: e.clientY - rect.top,
-              node: nodeData
-            });
-            onHoverUser(nodeData.id);
-            return;
-          }
-        } else {
-          container.style.cursor = 'grab';
-          setTooltip((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-          onHoverUser(null);
+      const intersects = raycaster.intersectObjects(hitMeshes, false);
+      if (intersects.length > 0) {
+        const hitData = intersects[0].object.userData?.node;
+        if (hitData) {
+          container.style.cursor = 'pointer';
+          setHoveredNodeData(hitData);
+          onHoverUser(hitData.id);
+          return;
         }
+      } else {
+        container.style.cursor = 'default';
+        setHoveredNodeData(null);
+        onHoverUser(null);
       }
-    };
-
-    const onPointerUp = () => {
-      camState.current.isDragging = false;
-    };
-
-    const onWheel = (e) => {
-      e.preventDefault();
-      camState.current.targetRadius = Math.max(
-        camState.current.minRadius,
-        Math.min(camState.current.maxRadius, camState.current.targetRadius + e.deltaY * 0.025)
-      );
     };
 
     const onClick = (e) => {
@@ -446,32 +496,38 @@ const AdminTopology3D = ({
 
       const intersects = raycaster.intersectObjects(hitMeshes, false);
       if (intersects.length > 0) {
-        const nodeData = intersects[0].object.userData?.node;
-        if (nodeData) {
-          onSelectUser(nodeData.id);
+        const hitData = intersects[0].object.userData?.node;
+        if (hitData) {
+          const item = nodesMapRef.current.get(hitData.id);
+          if (item) {
+            const p = item.group.position;
+            triggerCameraFlyTo(
+              new THREE.Vector3(p.x * 1.45, p.y + 6.5, p.z * 1.45),
+              new THREE.Vector3(p.x, p.y + 1.2, p.z)
+            );
+          }
+          onSelectUser(hitData.id);
         }
       }
     };
 
     const dom = renderer.domElement;
-    dom.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    dom.addEventListener('wheel', onWheel, { passive: false });
+    dom.addEventListener('pointermove', onPointerMove);
     dom.addEventListener('click', onClick);
 
-    // Responsive Canvas Resizing
+    // Responsive Resize Handler
     const handleResize = () => {
-      if (!container || !renderer || !camera) return;
-      const w = container.clientWidth || 900;
-      const h = container.clientHeight || 450;
+      if (!container || !renderer || !camera || !composer) return;
+      const w = container.clientWidth || 960;
+      const h = container.clientHeight || 460;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      composer.setSize(w, h);
     };
     window.addEventListener('resize', handleResize);
 
-    // 9. Main Animation Loop (High-Definition 60FPS)
+    // 11. 60FPS Studio Render Loop
     const clock = new THREE.Clock();
 
     const animate = () => {
@@ -479,91 +535,118 @@ const AdminTopology3D = ({
       const delta = clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
-      // Smooth Orbit Camera Interpolation
-      const cs = camState.current;
-      if (autoRotateRef.current && !cs.isDragging) {
-        cs.targetTheta += delta * 0.15;
+      // Camera Fly-To Smooth Interpolation
+      if (flyToTargetRef.current) {
+        const ft = flyToTargetRef.current;
+        ft.progress += delta * 1.8;
+        const alpha = Math.min(1.0, ft.progress);
+        camera.position.lerp(ft.camPos, 0.08);
+        controls.target.lerp(ft.lookAt, 0.08);
+        if (alpha >= 1.0 && camera.position.distanceTo(ft.camPos) < 0.2) {
+          flyToTargetRef.current = null;
+        }
       }
-      cs.theta += (cs.targetTheta - cs.theta) * 0.1;
-      cs.phi += (cs.targetPhi - cs.phi) * 0.1;
-      cs.radius += (cs.targetRadius - cs.radius) * 0.1;
 
-      camera.position.x = cs.radius * Math.sin(cs.phi) * Math.sin(cs.theta);
-      camera.position.y = cs.radius * Math.cos(cs.phi);
-      camera.position.z = cs.radius * Math.sin(cs.phi) * Math.cos(cs.theta);
-      camera.lookAt(0, 1.8, 0);
+      controls.update();
 
-      // Citadel Quantum Core Animations
-      const { crystal, cage, ring1, ring2, beam, coreLight } = coreAnimRef.current;
-      if (crystal) {
-        crystal.rotation.y += delta * 1.2;
-        crystal.rotation.x = Math.sin(elapsed * 1.8) * 0.25;
+      // Core Citadel Animations
+      const { crystal: c, cage: cg, ring1: r1, ring2: r2, ring3: r3, beam: bm, coreLight: cl } = coreAnimRef.current;
+      if (c) {
+        c.rotation.y += delta * 1.2;
+        c.rotation.x = Math.sin(elapsed * 1.8) * 0.22;
       }
-      if (cage) {
-        cage.rotation.y -= delta * 0.6;
-        cage.rotation.z = Math.cos(elapsed * 1.2) * 0.2;
+      if (cg) {
+        cg.rotation.y -= delta * 0.7;
+        cg.rotation.z = Math.cos(elapsed * 1.4) * 0.2;
       }
-      if (ring1) ring1.rotation.z += delta * 0.9;
-      if (ring2) ring2.rotation.z -= delta * 1.1;
-      if (beam) {
-        beam.material.opacity = 0.28 + Math.sin(elapsed * 3.5) * 0.12;
-      }
-      if (coreLight) {
-        coreLight.intensity = 3.6 + Math.sin(elapsed * 4.5) * 0.8;
+      if (r1) r1.rotation.z += delta * 0.9;
+      if (r2) r2.rotation.z -= delta * 1.1;
+      if (r3) r3.rotation.x += delta * 0.8;
+      if (bm) bm.material.opacity = 0.25 + Math.sin(elapsed * 3.2) * 0.12;
+      if (cl) cl.intensity = 4.2 + Math.sin(elapsed * 4.0) * 0.8;
+
+      // Radar Range Wave Pulsing (every 4 seconds)
+      if (radarWaveRef.current) {
+        const radarCycle = (elapsed % 4.0) / 4.0;
+        const currentRadius = 1.0 + radarCycle * 21.0;
+        radarWaveRef.current.scale.set(currentRadius, currentRadius, 1);
+        radarWaveRef.current.material.opacity = (1.0 - radarCycle) * 0.65;
       }
 
       // Animate Nodes & Crystals
       nodesMapRef.current.forEach((item) => {
-        const { crystal: cMesh, beaconRing, isPending } = item;
-        if (cMesh) {
-          cMesh.rotation.y += delta * (isPending ? 2.8 : 1.2);
-          cMesh.position.y = 1.15 + Math.sin(elapsed * 3.0 + item.phase) * 0.14;
+        const { crystal: cr, haloRing, warningSpire, isPending } = item;
+        if (cr) {
+          cr.rotation.y += delta * (isPending ? 2.8 : 1.2);
+          cr.position.y = 1.2 + Math.sin(elapsed * 3.0 + item.phase) * 0.14;
         }
-        if (beaconRing) {
-          const factor = isPending ? 6.0 : 2.5;
-          const amplitude = isPending ? 0.45 : 0.18;
-          const scale = 1.0 + Math.abs(Math.sin(elapsed * factor + item.phase)) * amplitude;
-          beaconRing.scale.set(scale, scale, 1);
+        if (haloRing) {
+          const factor = isPending ? 7.0 : 2.5;
+          const amp = isPending ? 0.4 : 0.16;
+          const scale = 1.0 + Math.abs(Math.sin(elapsed * factor + item.phase)) * amp;
+          haloRing.scale.set(scale, scale, 1);
+        }
+        if (warningSpire) {
+          warningSpire.material.opacity = 0.4 + Math.abs(Math.sin(elapsed * 6.0)) * 0.55;
         }
       });
 
-      // Animate Telemetry Packets with Smooth Bézier Trails
+      // Animate Luminous Telemetry Packets along Catmull-Rom Curvature
       packetsRef.current.forEach((pkt) => {
         pkt.t += delta * pkt.speed;
         if (pkt.t > 1) pkt.t = 0;
-
-        const u = 1 - pkt.t;
-        const tt = pkt.t * pkt.t;
-        const uu = u * u;
-
-        pkt.mesh.position.x = uu * pkt.startPos.x + 2 * u * pkt.t * pkt.midPos.x + tt * pkt.endPos.x;
-        pkt.mesh.position.y = uu * pkt.startPos.y + 2 * u * pkt.t * pkt.midPos.y + tt * pkt.endPos.y;
-        pkt.mesh.position.z = uu * pkt.startPos.z + 2 * u * pkt.t * pkt.midPos.z + tt * pkt.endPos.z;
+        const pos = pkt.curve.getPointAt(pkt.t);
+        pkt.mesh.position.copy(pos);
       });
 
-      // Animate Holographic Dust Particles
-      if (particlesRef.current) {
-        const posAttr = particlesRef.current.geometry.attributes.position;
-        const arr = posAttr.array;
+      // Atmospheric Data-Dust Particle Drift
+      if (dustParticlesRef.current) {
+        const arr = dustParticlesRef.current.geometry.attributes.position.array;
         for (let i = 1; i < arr.length; i += 3) {
-          arr[i] += delta * 0.45;
-          if (arr[i] > 14) arr[i] = 0.1;
+          arr[i] += delta * 0.4;
+          if (arr[i] > 16) arr[i] = 0.1;
         }
-        posAttr.needsUpdate = true;
+        dustParticlesRef.current.geometry.attributes.position.needsUpdate = true;
       }
 
-      renderer.render(scene, camera);
+      // Project 3D Node Positions onto 2D Overlay Tags
+      const screenCoords = [];
+      const halfW = width / 2;
+      const halfH = height / 2;
+      const tempVec = new THREE.Vector3();
+
+      nodesMapRef.current.forEach((item, id) => {
+        tempVec.setFromMatrixPosition(item.group.matrixWorld);
+        tempVec.y += 2.4; // Position tag directly above the tower top
+        tempVec.project(camera);
+
+        // Check if node is in front of the camera
+        if (tempVec.z < 1.0) {
+          const sx = tempVec.x * halfW + halfW;
+          const sy = -(tempVec.y * halfH) + halfH;
+          screenCoords.push({
+            id,
+            x: sx,
+            y: sy,
+            node: item.node,
+            isHovered: hoveredUserId === id,
+            isSelected: selectedUserId === id
+          });
+        }
+      });
+      setProjectedLabels(screenCoords);
+
+      // Render with Studio Glow Post-Processing
+      composer.render();
     };
 
     animate();
 
+    // Full WebGL Resource Disposal on Component Unmount
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      dom.removeEventListener('pointerdown', onPointerDown);
-      dom.removeEventListener('wheel', onWheel);
+      dom.removeEventListener('pointermove', onPointerMove);
       dom.removeEventListener('click', onClick);
 
       scene.traverse((obj) => {
@@ -574,13 +657,14 @@ const AdminTopology3D = ({
         }
       });
       renderer.dispose();
+      controls.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
   }, []);
 
-  // Synchronize 3D Nodes when topologyNodes data changes
+  // Synchronize 3D Endpoint Nodes & Fiber-Optic Arc Conduits
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -588,7 +672,7 @@ const AdminTopology3D = ({
     // Clear previous nodes and packets
     nodesMapRef.current.forEach((item) => {
       scene.remove(item.group);
-      if (item.conduit) scene.remove(item.conduit);
+      if (item.conduitTube) scene.remove(item.conduitTube);
     });
     nodesMapRef.current.clear();
 
@@ -596,8 +680,7 @@ const AdminTopology3D = ({
     packetsRef.current = [];
 
     const total = topologyNodes.length;
-    // Balanced orbital radius between 10.5 and 13.5
-    const baseRadius = 12.0;
+    const baseRadius = 12.5;
 
     topologyNodes.forEach((node, idx) => {
       const angle = (idx / total) * Math.PI * 2 - Math.PI / 4;
@@ -608,115 +691,132 @@ const AdminTopology3D = ({
       const nodeGroup = new THREE.Group();
       nodeGroup.position.set(x, 0, z);
 
-      // High-Detail Base Pedestal
-      const baseGeo = new THREE.CylinderGeometry(0.95, 1.25, 0.45, 6);
+      // 1. Dark Metallic Pedestal Base
+      const baseGeo = new THREE.CylinderGeometry(0.9, 1.2, 0.4, 6);
       const baseMat = new THREE.MeshStandardMaterial({
-        color: 0x0c1b2f,
-        metalness: 0.88,
-        roughness: 0.22,
+        color: 0x081320,
+        metalness: 0.9,
+        roughness: 0.2,
         emissive: node.color,
-        emissiveIntensity: node.isPending ? 0.7 : 0.3
+        emissiveIntensity: node.isPending ? 0.75 : 0.28
       });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-      baseMesh.position.y = 0.22;
+      baseMesh.position.y = 0.2;
       nodeGroup.add(baseMesh);
 
-      // Glowing Node Crystal / Terminal
+      // 2. Server Monolith Tower
+      const towerGeo = new THREE.BoxGeometry(0.72, 1.35, 0.72);
+      const towerMat = new THREE.MeshStandardMaterial({
+        color: 0x0c1b2f,
+        metalness: 0.88,
+        roughness: 0.16,
+        emissive: node.color,
+        emissiveIntensity: node.isPending ? 0.6 : 0.25
+      });
+      const towerMesh = new THREE.Mesh(towerGeo, towerMat);
+      towerMesh.position.y = 0.9;
+      nodeGroup.add(towerMesh);
+
+      // 3. Status Beacon Crystal hovering on top
       let crystalGeo;
-      if (node.type === 'infra') {
-        crystalGeo = new THREE.DodecahedronGeometry(0.6, 0);
+      if (node.isPending) {
+        crystalGeo = new THREE.ConeGeometry(0.42, 0.85, 4);
       } else if (node.isShikikan) {
-        crystalGeo = new THREE.OctahedronGeometry(0.65, 0);
+        crystalGeo = new THREE.OctahedronGeometry(0.5, 0);
       } else {
-        crystalGeo = new THREE.BoxGeometry(0.72, 0.72, 0.72);
+        crystalGeo = new THREE.DodecahedronGeometry(0.42, 0);
       }
 
       const crystalMat = new THREE.MeshStandardMaterial({
         color: node.color,
         emissive: node.color,
-        emissiveIntensity: node.isPending ? 0.95 : 0.65,
-        metalness: 0.9,
-        roughness: 0.12
+        emissiveIntensity: node.isPending ? 1.0 : 0.8,
+        metalness: 0.92,
+        roughness: 0.08
       });
       const crystalMesh = new THREE.Mesh(crystalGeo, crystalMat);
-      crystalMesh.position.y = 1.15;
+      crystalMesh.position.y = 1.95;
       nodeGroup.add(crystalMesh);
 
-      // Beacon Ground Ring
-      const ringGeo = new THREE.RingGeometry(1.25, 1.45, 36);
-      const ringMat = new THREE.MeshBasicMaterial({
+      // 4. Hovering Holographic Halo Ring
+      const haloGeo = new THREE.RingGeometry(1.25, 1.45, 36);
+      const haloMat = new THREE.MeshBasicMaterial({
         color: node.color,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: node.isPending ? 0.9 : 0.5
+        opacity: node.isPending ? 0.95 : 0.5
       });
-      const beaconRing = new THREE.Mesh(ringGeo, ringMat);
-      beaconRing.rotation.x = Math.PI / 2;
-      beaconRing.position.y = 0.02;
-      nodeGroup.add(beaconRing);
+      const haloRing = new THREE.Mesh(haloGeo, haloMat);
+      haloRing.rotation.x = Math.PI / 2;
+      haloRing.position.y = 0.02;
+      nodeGroup.add(haloRing);
 
-      // Elevated Danger Ring for Pending Approval
+      // 5. High-Alert Warning Spire for Pending Approval
+      let warningSpire = null;
       if (node.isPending) {
-        const alertRing = new THREE.Mesh(
-          new THREE.TorusGeometry(1.1, 0.035, 8, 32),
-          new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.85 })
-        );
-        alertRing.position.y = 1.9;
-        alertRing.rotation.x = Math.PI / 2;
-        nodeGroup.add(alertRing);
+        const spireGeo = new THREE.CylinderGeometry(0.04, 0.12, 4.5, 8);
+        const spireMat = new THREE.MeshBasicMaterial({
+          color: 0xff3b5c,
+          transparent: true,
+          opacity: 0.85
+        });
+        warningSpire = new THREE.Mesh(spireGeo, spireMat);
+        warningSpire.position.y = 4.2;
+        nodeGroup.add(warningSpire);
       }
 
-      // Invisible Raycast Hit Cylinder
-      const hitGeo = new THREE.CylinderGeometry(1.5, 1.5, 2.4, 8);
+      // 6. Invisible Raycast Hit Cylinder
+      const hitGeo = new THREE.CylinderGeometry(1.5, 1.5, 3.2, 8);
       const hitMat = new THREE.MeshBasicMaterial({ visible: false });
       const hitMesh = new THREE.Mesh(hitGeo, hitMat);
-      hitMesh.position.y = 1.2;
+      hitMesh.position.y = 1.6;
       hitMesh.userData = { node, id: node.id };
       nodeGroup.add(hitMesh);
 
       scene.add(nodeGroup);
 
-      // High-Speed Luminous Curved Conduit to Core
-      const startPos = new THREE.Vector3(x, 0.22, z);
-      const midPos = new THREE.Vector3(x * 0.4, 1.4, z * 0.4);
-      const endPos = new THREE.Vector3(0, 0.8, 0);
+      // 7. Sweeping 3D Arc Fiber-Optic Conduit (CatmullRomCurve3 + TubeGeometry)
+      const pStart = new THREE.Vector3(x, 0.35, z);
+      const pMid = new THREE.Vector3(x * 0.45, 1.8, z * 0.45);
+      const pEnd = new THREE.Vector3(0, 0.75, 0);
 
-      const curve = new THREE.QuadraticBezierCurve3(startPos, midPos, endPos);
-      const points = curve.getPoints(24);
-      const conduitGeo = new THREE.BufferGeometry().setFromPoints(points);
-      const conduitMat = new THREE.LineBasicMaterial({
+      const conduitCurve = new THREE.CatmullRomCurve3([pStart, pMid, pEnd]);
+      const tubeGeo = new THREE.TubeGeometry(conduitCurve, 32, 0.05, 8, false);
+      const tubeMat = new THREE.MeshStandardMaterial({
         color: node.color,
+        emissive: node.color,
+        emissiveIntensity: node.isPending ? 0.95 : 0.45,
         transparent: true,
-        opacity: node.isPending ? 0.85 : 0.45
+        opacity: node.isPending ? 0.9 : 0.5
       });
-      const conduit = new THREE.Line(conduitGeo, conduitMat);
-      scene.add(conduit);
+      const conduitTube = new THREE.Mesh(tubeGeo, tubeMat);
+      scene.add(conduitTube);
 
-      // 2 Staggered Telemetry Packets per Conduit
+      // 8. Luminous Energy Spheres (Telemetry Packets)
       [0.0, 0.5].forEach((offset) => {
-        const pktGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const pktGeo = new THREE.SphereGeometry(0.18, 8, 8);
         const pktMat = new THREE.MeshBasicMaterial({
-          color: node.isPending ? 0xf43f5e : node.color
+          color: node.isPending ? 0xff3b5c : node.color
         });
         const pktMesh = new THREE.Mesh(pktGeo, pktMat);
         scene.add(pktMesh);
 
         packetsRef.current.push({
           mesh: pktMesh,
-          startPos,
-          midPos,
-          endPos,
+          curve: conduitCurve,
           t: offset,
-          speed: node.isPending ? 0.8 : 0.48
+          speed: node.isPending ? 0.75 : 0.45
         });
       });
 
       nodesMapRef.current.set(node.id, {
         group: nodeGroup,
         crystal: crystalMesh,
-        beaconRing,
-        conduit,
+        haloRing,
+        warningSpire,
+        conduitTube,
         hitMesh,
+        node,
         color: node.color,
         isPending: node.isPending,
         phase: Math.random() * Math.PI * 2
@@ -735,7 +835,7 @@ const AdminTopology3D = ({
         spotlightRef.current.target = item.group;
         spotlightRef.current.color.setHex(item.color);
       }
-      item.group.scale.set(1.22, 1.22, 1.22);
+      item.group.scale.set(1.2, 1.2, 1.2);
     } else {
       if (spotlightRef.current) spotlightRef.current.intensity = 0;
       nodesMapRef.current.forEach((val) => val.group.scale.set(1, 1, 1));
@@ -749,17 +849,101 @@ const AdminTopology3D = ({
         position: 'relative',
         width: '100%',
         height: '460px',
-        borderRadius: '12px',
         overflow: 'hidden',
-        border: '1px solid rgba(0, 255, 204, 0.25)',
-        background: '#060b16',
-        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.7)'
+        border: '1px solid rgba(0, 255, 204, 0.22)',
+        borderRadius: '14px',
+        background: '#04070f',
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85)'
       }}
     >
-      {/* 3D WebGL Canvas */}
+      {/* 3D WebGL Canvas Stage */}
       <div ref={mountRef} style={{ width: '100%', height: '100%', display: 'block' }} />
 
-      {/* Floating HUD Deck Overlay */}
+      {/* 3D-to-2D Projected HUD Callout Tags (Zero-Lag Projected Labels) */}
+      <div
+        className="topology-projected-tags-layer"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          overflow: 'hidden'
+        }}
+      >
+        {projectedLabels.map((lbl) => {
+          const isPending = lbl.node.isPending;
+          const isShikikan = lbl.node.isShikikan;
+          const isHighlighted = lbl.isHovered || lbl.isSelected;
+
+          let badgeBorder = 'rgba(0, 255, 204, 0.35)';
+          let badgeBg = 'rgba(6, 14, 28, 0.82)';
+          let dotColor = '#38bdf8';
+          let statusText = 'STANDARD';
+
+          if (isPending) {
+            badgeBorder = '#ff3b5c';
+            badgeBg = 'rgba(38, 10, 18, 0.92)';
+            dotColor = '#ff3b5c';
+            statusText = 'PENDING APPROVAL';
+          } else if (isShikikan) {
+            badgeBorder = '#00ffcc';
+            badgeBg = 'rgba(6, 24, 24, 0.88)';
+            dotColor = '#00ffcc';
+            statusText = 'VERIFIED';
+          }
+
+          return (
+            <div
+              key={lbl.id}
+              style={{
+                position: 'absolute',
+                left: `${lbl.x}px`,
+                top: `${lbl.y}px`,
+                transform: `translate(-50%, -100%) scale(${isHighlighted ? 1.15 : 1.0})`,
+                transition: 'transform 0.15s ease',
+                pointerEvents: 'auto',
+                cursor: 'pointer'
+              }}
+              onClick={() => onSelectUser(lbl.id)}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '3px 8px',
+                  borderRadius: '16px',
+                  background: badgeBg,
+                  backdropFilter: 'blur(8px)',
+                  border: `1px solid ${isHighlighted ? '#00ffcc' : badgeBorder}`,
+                  boxShadow: isHighlighted ? '0 0 14px rgba(0, 255, 204, 0.45)' : '0 4px 12px rgba(0, 0, 0, 0.6)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: dotColor,
+                    boxShadow: `0 0 6px ${dotColor}`
+                  }}
+                />
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.4px' }}>
+                  @{lbl.node.name}
+                </span>
+                <span style={{ fontSize: '0.58rem', fontWeight: 700, color: dotColor, opacity: 0.9 }}>
+                  • {statusText}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Floating Glass Camera HUD Presets Deck */}
       <div
         style={{
           position: 'absolute',
@@ -777,10 +961,10 @@ const AdminTopology3D = ({
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            background: 'rgba(6, 11, 22, 0.88)',
-            backdropFilter: 'blur(10px)',
+            background: 'rgba(6, 12, 24, 0.86)',
+            backdropFilter: 'blur(12px)',
             padding: '7px 16px',
-            borderRadius: '6px',
+            borderRadius: '8px',
             border: '1px solid rgba(0, 255, 204, 0.35)',
             boxShadow: '0 0 16px rgba(0, 255, 204, 0.15)'
           }}
@@ -803,58 +987,59 @@ const AdminTopology3D = ({
               textTransform: 'uppercase'
             }}
           >
-            Tactical SOC Mesh ({topologyNodes.length} Active Nodes)
+            Live Cyber-Topology Mesh ({topologyNodes.length} Nodes)
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
+        {/* Camera Preset Controls */}
+        <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>
           <button
-            onClick={toggleAutoRotate}
-            title={autoRotate ? 'Pause Auto-Orbit' : 'Resume Auto-Orbit'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: autoRotate ? 'rgba(0, 255, 204, 0.18)' : 'rgba(6, 11, 22, 0.88)',
-              backdropFilter: 'blur(10px)',
-              border: `1px solid ${autoRotate ? '#00ffcc' : 'rgba(255, 255, 255, 0.2)'}`,
-              color: autoRotate ? '#00ffcc' : '#f8fafc',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '0.74rem',
-              cursor: 'pointer',
-              fontWeight: 700
-            }}
+            onClick={() => applyPresetView('iso')}
+            className={`topology-hud-chip ${activePreset === 'iso' ? 'active' : ''}`}
+            title="Isometric 35° Perspective"
+          >
+            <Compass size={12} />
+            <span>Isometric</span>
+          </button>
+
+          <button
+            onClick={() => applyPresetView('radar')}
+            className={`topology-hud-chip ${activePreset === 'radar' ? 'active' : ''}`}
+            title="Top-Down Tactical Radar"
+          >
+            <Crosshair size={12} />
+            <span>Top Radar</span>
+          </button>
+
+          <button
+            onClick={() => applyPresetView('pending')}
+            className={`topology-hud-chip ${activePreset === 'pending' ? 'active' : ''}`}
+            title="Focus Pending Approval Node"
+          >
+            <AlertTriangle size={12} color="#ff3b5c" />
+            <span>Focus Pending</span>
+          </button>
+
+          <button
+            onClick={toggleOrbitMode}
+            className={`topology-hud-chip ${autoRotate ? 'active' : ''}`}
+            title="Toggle Cinematic Auto-Rotation"
           >
             {autoRotate ? <Pause size={12} /> : <Play size={12} />}
-            Orbit: {autoRotate ? 'ON' : 'OFF'}
+            <span>Auto-Orbit: {autoRotate ? 'ON' : 'OFF'}</span>
           </button>
 
           <button
             onClick={handleResetCamera}
-            title="Reset Isometric Camera Angle"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'rgba(6, 11, 22, 0.88)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(0, 255, 204, 0.35)',
-              color: '#f8fafc',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '0.74rem',
-              cursor: 'pointer',
-              fontWeight: 700
-            }}
+            className="topology-hud-chip"
+            title="Reset Camera Orientation"
           >
             <RotateCcw size={12} color="#00ffcc" />
-            Reset Camera
           </button>
         </div>
       </div>
 
-      {/* Topology Legend Footer */}
+      {/* Cyber Legend Bar */}
       <div
         style={{
           position: 'absolute',
@@ -862,93 +1047,33 @@ const AdminTopology3D = ({
           left: 16,
           display: 'flex',
           gap: 16,
-          background: 'rgba(6, 11, 22, 0.82)',
+          background: 'rgba(6, 12, 24, 0.82)',
           backdropFilter: 'blur(8px)',
           padding: '6px 14px',
           borderRadius: '6px',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           fontSize: '0.72rem',
-          color: '#cbd5e1',
+          color: '#94a3b8',
           pointerEvents: 'none'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#00ffcc', boxShadow: '0 0 8px #00ffcc' }} />
-          <span>SOC Fortress Core</span>
+          <span>SOC Quantum Core</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#10b981' }} />
-          <span>Verified Shiki-kan</span>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#00ffcc' }} />
+          <span>Shiki-kan Verified</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f59e0b' }} />
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff3b5c', boxShadow: '0 0 8px #ff3b5c' }} />
           <span>Pending Approval</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#38bdf8' }} />
-          <span>Infra / Operator Node</span>
+          <span>Standard Endpoint</span>
         </div>
       </div>
-
-      {/* Floating 3D Node Glass Tooltip */}
-      {tooltip.visible && tooltip.node && (
-        <div
-          style={{
-            position: 'absolute',
-            left: Math.min(tooltip.x + 16, (mountRef.current?.clientWidth || 900) - 240),
-            top: Math.max(12, tooltip.y - 85),
-            pointerEvents: 'none',
-            background: 'rgba(10, 20, 38, 0.94)',
-            backdropFilter: 'blur(16px)',
-            border: `1px solid ${tooltip.node.isPending ? '#f59e0b' : tooltip.node.isShikikan ? '#10b981' : '#00ffcc'}`,
-            borderRadius: '8px',
-            padding: '12px 16px',
-            boxShadow: '0 12px 36px rgba(0, 0, 0, 0.8)',
-            minWidth: '220px',
-            zIndex: 40
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#f8fafc' }}>
-              {tooltip.node.name}
-            </span>
-            <span
-              style={{
-                fontSize: '0.66rem',
-                fontWeight: 800,
-                padding: '2px 7px',
-                borderRadius: '4px',
-                background: tooltip.node.isOnline ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.25)',
-                color: tooltip.node.isOnline ? '#10b981' : '#94a3b8'
-              }}
-            >
-              {tooltip.node.isOnline ? 'ONLINE' : 'OFFLINE'}
-            </span>
-          </div>
-
-          {tooltip.node.email && (
-            <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginBottom: 6, fontFamily: 'monospace' }}>
-              {tooltip.node.email}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem' }}>
-            <span style={{ color: '#64748b' }}>Role:</span>
-            <span
-              style={{
-                color: tooltip.node.isShikikan
-                  ? '#10b981'
-                  : tooltip.node.isPending
-                  ? '#f59e0b'
-                  : '#38bdf8',
-                fontWeight: 700
-              }}
-            >
-              {tooltip.node.roleText}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

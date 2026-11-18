@@ -15,6 +15,10 @@ import {
   ExternalLink,
   LogOut,
   RefreshCw,
+  Crosshair,
+  Sparkles,
+  Lock,
+  Unlock,
   SlidersHorizontal
 } from 'lucide-react';
 import AdminTopology3D from './AdminTopology3D';
@@ -28,6 +32,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [hoveredUserId, setHoveredUserId] = useState(null);
+  const [flyToUserId, setFlyToUserId] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -87,20 +92,20 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
 
   // Filter out system admins for normal endpoint topology & permission view
   const standardUsers = useMemo(() => {
-    return users.filter(u => u.role !== 'admin');
+    return users.filter((u) => u.role !== 'admin');
   }, [users]);
 
   // Derived KPI Counts
   const requestedUsers = useMemo(() => {
-    return standardUsers.filter(u => u.shikikan_requested && !u.shikikan_access);
+    return standardUsers.filter((u) => u.shikikan_requested && !u.shikikan_access);
   }, [standardUsers]);
 
   const verifiedUsers = useMemo(() => {
-    return standardUsers.filter(u => u.shikikan_access);
+    return standardUsers.filter((u) => u.shikikan_access);
   }, [standardUsers]);
 
   const onlineEndpoints = useMemo(() => {
-    return standardUsers.filter(u => u.is_online);
+    return standardUsers.filter((u) => u.is_online);
   }, [standardUsers]);
 
   // Search & Tab filtered dataset
@@ -114,12 +119,20 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
 
     if (!searchQuery.trim()) return dataset;
     const q = searchQuery.toLowerCase().trim();
-    return dataset.filter(u =>
-      (u.username && u.username.toLowerCase().includes(q)) ||
-      (u.email && u.email.toLowerCase().includes(q)) ||
-      (u.dob && String(u.dob).includes(q))
+    return dataset.filter(
+      (u) =>
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.dob && String(u.dob).includes(q))
     );
   }, [standardUsers, requestedUsers, verifiedUsers, activeTab, searchQuery]);
+
+  const handleInspectIn3D = (userId) => {
+    setSelectedUserId(userId);
+    setFlyToUserId(userId);
+    // Smooth scroll to top of 3D stage if needed
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleConsoleSwitch = () => {
     if (typeof onSwitchToThreatConsole === 'function') {
@@ -145,7 +158,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
       <div className="admin-soc-deck">
         <div className="admin-loading-spinner">
           <Activity size={32} className="spin-icon" color="#00ffcc" />
-          <span>Synchronizing 3D SOC Topology & User Telemetry...</span>
+          <span>Synchronizing Studio 3D SOC Topology & User Telemetry...</span>
         </div>
       </div>
     );
@@ -161,7 +174,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           </div>
           <div className="admin-title-text">
             <h1>SelectShans SOC Admin Control</h1>
-            <span>3D Endpoint Topology & RBAC Command Deck</span>
+            <span>Studio 3D Cyber-Topology & RBAC Command Deck</span>
           </div>
         </div>
 
@@ -172,8 +185,8 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
             className="admin-action-btn secondary"
             title="Refresh Live Telemetry"
           >
-            <RefreshCw size={14} className={isSyncing ? "spin-icon" : ""} />
-            <span>{isSyncing ? "Syncing..." : "Sync"}</span>
+            <RefreshCw size={14} className={isSyncing ? 'spin-icon' : ''} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
           </button>
           <button
             onClick={handleConsoleSwitch}
@@ -194,22 +207,25 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
         </div>
       </div>
 
-      {/* 2. Interactive 3D Isometric Endpoint & SOC Topology Hero Deck */}
+      {/* 2. Studio-Grade 3D Isometric Cyber-Topology Stage */}
       <div className="admin-topology-hero">
         <AdminTopology3D
           users={standardUsers}
           selectedUserId={selectedUserId}
           hoveredUserId={hoveredUserId}
-          onSelectUser={(userId) => setSelectedUserId(userId === selectedUserId ? null : userId)}
+          flyToUserId={flyToUserId}
+          onSelectUser={(userId) => {
+            setSelectedUserId(userId === selectedUserId ? null : userId);
+          }}
           onHoverUser={(userId) => setHoveredUserId(userId)}
         />
       </div>
 
-      {/* 3. High-Contrast Tactical KPI Grid */}
+      {/* 3. Floating KPI Telemetry Strip (Docked below 3D stage) */}
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card kpi-cyan">
           <div className="admin-kpi-header">
-            <span className="admin-kpi-label">Total Endpoints</span>
+            <span className="admin-kpi-label">Registered Operators</span>
             <div className="admin-kpi-icon-wrap">
               <Users size={18} />
             </div>
@@ -217,11 +233,11 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           <div className="admin-kpi-value">{standardUsers.length}</div>
           <div className="admin-kpi-caption">
             <Activity size={12} color="#00ffcc" />
-            Registered host machines & operators
+            Active endpoint workstations on network
           </div>
         </div>
 
-        <div className="admin-kpi-card kpi-amber">
+        <div className={`admin-kpi-card kpi-amber ${requestedUsers.length > 0 ? 'pulse-danger' : ''}`}>
           <div className="admin-kpi-header">
             <span className="admin-kpi-label">Pending Shiki-kan</span>
             <div className="admin-kpi-icon-wrap">
@@ -230,14 +246,14 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           </div>
           <div className="admin-kpi-value">{requestedUsers.length}</div>
           <div className="admin-kpi-caption">
-            <Clock size={12} color="#f59e0b" />
-            Awaiting administrator approval
+            <Clock size={12} color={requestedUsers.length > 0 ? '#ff3b5c' : '#f59e0b'} />
+            {requestedUsers.length > 0 ? 'Immediate action required' : 'No pending approval requests'}
           </div>
         </div>
 
         <div className="admin-kpi-card kpi-emerald">
           <div className="admin-kpi-header">
-            <span className="admin-kpi-label">Verified Operators</span>
+            <span className="admin-kpi-label">Step-Up Verified</span>
             <div className="admin-kpi-icon-wrap">
               <ShieldCheck size={18} />
             </div>
@@ -245,13 +261,13 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           <div className="admin-kpi-value">{verifiedUsers.length}</div>
           <div className="admin-kpi-caption">
             <CheckCircle size={12} color="#10b981" />
-            Active step-up Shiki-kan clearance
+            Full Shiki-kan privileged clearance
           </div>
         </div>
 
         <div className="admin-kpi-card kpi-sky">
           <div className="admin-kpi-header">
-            <span className="admin-kpi-label">Online Active Nodes</span>
+            <span className="admin-kpi-label">3D Telemetry Links</span>
             <div className="admin-kpi-icon-wrap">
               <Zap size={18} />
             </div>
@@ -259,27 +275,33 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           <div className="admin-kpi-value">{onlineEndpoints.length}</div>
           <div className="admin-kpi-caption">
             <span className="node-status-dot online" style={{ margin: 0 }} />
-            Transmitting live heartbeat to SOC
+            Fiber-optic conduits transmitting live
           </div>
         </div>
       </div>
 
-      {/* 4. Controls Strip: Filter Tabs + Search Bar */}
+      {/* 4. Filter Pills & Instant Search Strip */}
       <div className="admin-table-controls">
         <div className="admin-tabs-group">
           <button
             onClick={() => setActiveTab('all')}
             className={`admin-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
           >
-            <span>All Endpoints</span>
+            <span>All Operators</span>
             <span className="admin-tab-count">{standardUsers.length}</span>
           </button>
           <button
             onClick={() => setActiveTab('requests')}
             className={`admin-tab-btn ${activeTab === 'requests' ? 'active' : ''}`}
           >
-            <span>Access Requests</span>
-            <span className="admin-tab-count" style={{ background: requestedUsers.length > 0 ? '#f59e0b' : undefined, color: requestedUsers.length > 0 ? '#060b16' : undefined }}>
+            <span>Pending Requests</span>
+            <span
+              className="admin-tab-count"
+              style={{
+                background: requestedUsers.length > 0 ? '#ff3b5c' : undefined,
+                color: requestedUsers.length > 0 ? '#ffffff' : undefined
+              }}
+            >
               {requestedUsers.length}
             </span>
           </button>
@@ -296,7 +318,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
           <Search size={16} className="admin-search-icon" />
           <input
             type="text"
-            placeholder="Search by username, email, or DOB..."
+            placeholder="Search by operator, email, or DOB..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="admin-search-input"
@@ -304,7 +326,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
         </div>
       </div>
 
-      {/* 5. User Monitoring & Permissions Table Deck */}
+      {/* 5. User Monitoring & Permissions Matrix */}
       <div className="admin-table-deck">
         <table className="admin-table">
           <thead>
@@ -314,7 +336,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
               <th>Registered Email</th>
               <th>DOB Token</th>
               <th>Last Seen Activity</th>
-              <th>Shiki-kan Privilege</th>
+              <th>Shiki-kan Clearance</th>
               <th style={{ textAlign: 'right' }}>Authorization Action</th>
             </tr>
           </thead>
@@ -333,7 +355,7 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
                 const isHovered = hoveredUserId === user.id;
 
                 let statusPillClass = 'none';
-                let statusPillText = 'Standard User';
+                let statusPillText = 'Standard Operator';
                 if (user.shikikan_access) {
                   statusPillClass = 'verified';
                   statusPillText = 'Verified Shiki-kan';
@@ -356,17 +378,29 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
                         <span className={`node-status-dot ${isOnline ? 'online' : 'offline'}`} />
-                        <span style={{ fontSize: '0.74rem', color: isOnline ? '#10b981' : '#64748b', fontWeight: 600 }}>
+                        <span
+                          style={{
+                            fontSize: '0.74rem',
+                            color: isOnline ? '#00ffcc' : '#64748b',
+                            fontWeight: 700
+                          }}
+                        >
                           {isOnline ? 'ONLINE' : 'OFFLINE'}
                         </span>
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                      <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.86rem' }}>
                         {user.username}
                       </div>
                     </td>
-                    <td style={{ color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.78rem' }}>
+                    <td
+                      style={{
+                        color: '#94a3b8',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: '0.78rem'
+                      }}
+                    >
                       {user.email}
                     </td>
                     <td style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>
@@ -377,29 +411,49 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
                     </td>
                     <td>
                       <span className={`shikikan-pill ${statusPillClass}`}>
-                        {user.shikikan_access ? <ShieldCheck size={12} /> : user.shikikan_requested ? <ShieldAlert size={12} /> : <Shield size={12} />}
+                        {user.shikikan_access ? (
+                          <ShieldCheck size={12} />
+                        ) : user.shikikan_requested ? (
+                          <ShieldAlert size={12} />
+                        ) : (
+                          <Shield size={12} />
+                        )}
                         {statusPillText}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        disabled={actionLoadingId === user.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleShikikanAccess(user.id, user.shikikan_access);
-                        }}
-                        className={`admin-row-action-btn ${user.shikikan_access ? 'revoke' : 'approve'}`}
-                      >
-                        {actionLoadingId === user.id ? (
-                          'Updating...'
-                        ) : user.shikikan_access ? (
-                          'Revoke Clearance'
-                        ) : user.shikikan_requested ? (
-                          'Approve Shiki-kan'
-                        ) : (
-                          'Grant Clearance'
-                        )}
-                      </button>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectIn3D(user.id);
+                          }}
+                          className="admin-row-action-btn inspect"
+                          title="Fly 3D Camera to this Endpoint"
+                        >
+                          <Crosshair size={12} />
+                          <span>Inspect in 3D</span>
+                        </button>
+
+                        <button
+                          disabled={actionLoadingId === user.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleShikikanAccess(user.id, user.shikikan_access);
+                          }}
+                          className={`admin-row-action-btn ${user.shikikan_access ? 'revoke' : 'approve'}`}
+                        >
+                          {actionLoadingId === user.id ? (
+                            'Updating...'
+                          ) : user.shikikan_access ? (
+                            'Revoke Access'
+                          ) : user.shikikan_requested ? (
+                            'Approve Shiki-kan'
+                          ) : (
+                            'Grant Clearance'
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
