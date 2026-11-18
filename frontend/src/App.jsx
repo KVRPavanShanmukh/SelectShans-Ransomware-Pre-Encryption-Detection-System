@@ -1,26 +1,37 @@
 import { API_URL } from './config';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import FileUploader from './components/FileUploader';
-import SysmonLogs from './components/SysmonLogs';
-import ActiveShield from './components/ActiveShield';
-import EncryptionLab from './components/EncryptionLab';
-import Settings from './components/Settings';
-import ProfileSettings from './components/ProfileSettings';
-import AuditLog from './components/AuditLog';
-import Login from './components/Login';
-import AdminLogin from './components/AdminLogin';
-import AdminDashboard from './components/AdminDashboard';
-import Signup from './components/Signup';
-import SOAR from './components/SOAR';
-import BetaLogin from './components/BetaLogin';
-import BetaTerminal from './components/BetaTerminal';
 import SessionManager from './components/SessionManager';
-import LearningHub from './components/LearningHub';
-import TechDetail from './components/TechDetail';
 import DraggableLearnButton from './components/DraggableLearnButton';
 import './App.css';
+
+// Lazy-loaded components for optimal bundle splitting and fast initial page load
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const FileUploader = lazy(() => import('./components/FileUploader'));
+const SysmonLogs = lazy(() => import('./components/SysmonLogs'));
+const ActiveShield = lazy(() => import('./components/ActiveShield'));
+const EncryptionLab = lazy(() => import('./components/EncryptionLab'));
+const Settings = lazy(() => import('./components/Settings'));
+const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
+const AuditLog = lazy(() => import('./components/AuditLog'));
+const Login = lazy(() => import('./components/Login'));
+const AdminLogin = lazy(() => import('./components/AdminLogin'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const Signup = lazy(() => import('./components/Signup'));
+const SOAR = lazy(() => import('./components/SOAR'));
+const BetaLogin = lazy(() => import('./components/BetaLogin'));
+const BetaTerminal = lazy(() => import('./components/BetaTerminal'));
+const LearningHub = lazy(() => import('./components/LearningHub'));
+const TechDetail = lazy(() => import('./components/TechDetail'));
+
+// Clean loading placeholder for lazy chunks
+const TabLoading = () => (
+  <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary, #7aada0)' }}>
+    <div className="status-badge" style={{ display: 'inline-block', padding: '6px 16px', fontSize: '0.85rem' }}>
+      Loading module...
+    </div>
+  </div>
+);
 
 // Cryptographic helper: decode and extract role and user claims directly from JWT payload
 const decodeJwtPayload = (token) => {
@@ -45,11 +56,19 @@ function App() {
   // Handle direct routing for Learning Hub pages
   const pathname = window.location.pathname;
   if (pathname === '/learning-hub') {
-    return <LearningHub />;
+    return (
+      <Suspense fallback={<TabLoading />}>
+        <LearningHub />
+      </Suspense>
+    );
   }
   if (pathname.startsWith('/learning-hub/')) {
     const techId = pathname.split('/')[2];
-    return <TechDetail techId={techId} />;
+    return (
+      <Suspense fallback={<TabLoading />}>
+        <TechDetail techId={techId} />
+      </Suspense>
+    );
   }
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -218,15 +237,27 @@ function App() {
   };
 
   if (!isAuthenticated && !isSignup && !showAdminLogin) {
-    return <Login onLogin={handleLogin} onSwitchToSignup={() => setIsSignup(true)} onSwitchToAdmin={() => setShowAdminLogin(true)} />;
+    return (
+      <Suspense fallback={<TabLoading />}>
+        <Login onLogin={handleLogin} onSwitchToSignup={() => setIsSignup(true)} onSwitchToAdmin={() => setShowAdminLogin(true)} />
+      </Suspense>
+    );
   }
 
   if (!isAuthenticated && showAdminLogin) {
-    return <AdminLogin onAdminLogin={handleLogin} onCancel={() => setShowAdminLogin(false)} />;
+    return (
+      <Suspense fallback={<TabLoading />}>
+        <AdminLogin onAdminLogin={handleLogin} onCancel={() => setShowAdminLogin(false)} />
+      </Suspense>
+    );
   }
 
   if (!isAuthenticated && isSignup) {
-    return <Signup onSignupSuccess={() => setIsSignup(false)} onSwitchToLogin={() => setIsSignup(false)} />;
+    return (
+      <Suspense fallback={<TabLoading />}>
+        <Signup onSignupSuccess={() => setIsSignup(false)} onSwitchToLogin={() => setIsSignup(false)} />
+      </Suspense>
+    );
   }
 
   if (isAdmin && adminViewMode === 'admin') {
@@ -253,7 +284,9 @@ function App() {
             </div>
           </header>
           <div className="main-view">
-            <AdminDashboard jwtToken={jwtToken} />
+            <Suspense fallback={<TabLoading />}>
+              <AdminDashboard jwtToken={jwtToken} />
+            </Suspense>
           </div>
         </main>
       </div>
@@ -345,31 +378,33 @@ function App() {
         </header>
 
         <div className="main-view">
-          {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} apiBase={API_URL} logsUploaded={logsUploaded} />}
-          {!adminTab && activeTab === 'upload' && <FileUploader jwtToken={jwtToken} onLogsUploaded={() => setLogsUploaded(true)} />}
-          {!adminTab && activeTab === 'logs' && <SysmonLogs />}
-          {!adminTab && activeTab === 'protection' && <ActiveShield />}
-          {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
-          {!adminTab && activeTab === 'soar' && <SOAR userId={userId} apiBase={API_URL} />}
-          {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} /> }
-          
-          {!adminTab && activeTab === 'beta' && !betaToken && (
-            <BetaLogin 
-              jwtToken={jwtToken} 
-              onBetaLoginSuccess={(token) => setBetaToken(token)} 
-              onCancel={() => setActiveTab('dashboard')} 
-            />
-          )}
-          {!adminTab && activeTab === 'beta' && betaToken && (
-            <BetaTerminal 
-              jwtToken={jwtToken} 
-              betaToken={betaToken} 
-              onClose={() => setActiveTab('dashboard')} 
-            />
-          )}
-          
-          {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
-          {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
+          <Suspense fallback={<TabLoading />}>
+            {!adminTab && activeTab === 'dashboard' && <Dashboard userId={userId} apiBase={API_URL} logsUploaded={logsUploaded} />}
+            {!adminTab && activeTab === 'upload' && <FileUploader jwtToken={jwtToken} onLogsUploaded={() => setLogsUploaded(true)} />}
+            {!adminTab && activeTab === 'logs' && <SysmonLogs />}
+            {!adminTab && activeTab === 'protection' && <ActiveShield />}
+            {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
+            {!adminTab && activeTab === 'soar' && <SOAR userId={userId} apiBase={API_URL} />}
+            {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} /> }
+            
+            {!adminTab && activeTab === 'beta' && !betaToken && (
+              <BetaLogin 
+                jwtToken={jwtToken} 
+                onBetaLoginSuccess={(token) => setBetaToken(token)} 
+                onCancel={() => setActiveTab('dashboard')} 
+              />
+            )}
+            {!adminTab && activeTab === 'beta' && betaToken && (
+              <BetaTerminal 
+                jwtToken={jwtToken} 
+                betaToken={betaToken} 
+                onClose={() => setActiveTab('dashboard')} 
+              />
+            )}
+            
+            {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
+            {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
+          </Suspense>
         </div>
       </main>
 
