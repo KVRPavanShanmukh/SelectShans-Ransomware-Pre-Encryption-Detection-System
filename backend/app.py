@@ -27,20 +27,22 @@ load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "development")
 
 # Strict environment variable enforcement — no hardcoded fallback secrets allowed
-REQUIRED_ENV_VARS = ["DB_PASSWORD", "JWT_SECRET", "DETECTOR_SECRET"]
+REQUIRED_ENV_VARS = ["JWT_SECRET", "DETECTOR_SECRET"]
 for var in REQUIRED_ENV_VARS:
     if not os.getenv(var):
         raise RuntimeError(f"Missing required environment variable: {var}. Configure it in your environment or .env file.")
 
 JWT_SECRET = os.environ["JWT_SECRET"]
 DETECTOR_SECRET = os.environ["DETECTOR_SECRET"]
-DB_PASSWORD = os.environ["DB_PASSWORD"]
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, request, jsonify, send_file, after_this_request, g
 from flask_cors import CORS
-from mysql.connector import pooling
+import psycopg2
+from psycopg2 import pool as pg_pool
+from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # JWT and utilities
@@ -93,61 +95,104 @@ def health_check():
 
 is_vercel = os.getenv("VERCEL") == "1"
 
-db_pass = os.getenv("DB_PASSWORD")
+class PooledConnectionWrapper:
+    """
+    Wraps a psycopg2 connection checked out from ThreadedConnectionPool.
+    - Delegates .cursor() to return a cursor with RealDictCursor by default,
+      ignoring MySQL-specific kwargs like dictionary=True or buffered=True.
+    - Delegates .close() to put the connection back into the pool.
+    - Ensures connection is rolled back if closed during an active transaction or error.
+    - Forwards other attributes/methods to the underlying psycopg2 connection.
+    """
+    def __init__(self, conn, pool):
+        self._conn = conn
+        self._pool = pool
+        self._closed = False
 
-db_name = os.getenv("DB_NAME", "RANSOMWARE")
+    def cursor(self, *args, **kwargs):
+        # Strip MySQL-specific arguments (dictionary=True, buffered=True)
+        kwargs.pop("dictionary", None)
+        kwargs.pop("buffered", None)
+        if "cursor_factory" not in kwargs:
+            kwargs["cursor_factory"] = RealDictCursor
+        return self._conn.cursor(*args, **kwargs)
 
-dbconf = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 3306)),
-    "user": os.getenv("DB_USER", "root"),
-    "password": db_pass
-}
+    def close(self):
+        if not self._closed and self._conn and self._pool:
+            try:
+                # If transaction in progress or in error, rollback before returning to pool
+                if self._conn.status != psycopg2.extensions.STATUS_READY:
+                    self._conn.rollback()
+            except Exception:
+                pass
+            try:
+                self._pool.putconn(self._conn)
+            except Exception:
+                pass
+            self._closed = True
 
-# Add database name to configuration for the pool
-dbconf["database"] = db_name
+    def __enter__(self):
+        return self
 
-class ResilientMySQLPool:
-    def __init__(self, config, is_vercel_env=False):
-        self.config = config
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+class ResilientPostgresPool:
+    def __init__(self, dsn=None, sslmode="require", is_vercel_env=False):
+        self.dsn = dsn
+        self.sslmode = sslmode
         self.is_vercel = is_vercel_env
         self._pool = None
         self._init_pool()
 
     def _init_pool(self):
-        try:
-            # Pre-create database if not production
-            if not (self.is_vercel or APP_ENV.lower() == "production"):
-                try:
-                    import mysql.connector
-                    pre_conf = {k: v for k, v in self.config.items() if k != "database"}
-                    t_conn = mysql.connector.connect(**pre_conf)
-                    t_cur = t_conn.cursor()
-                    t_cur.execute(f"CREATE DATABASE IF NOT EXISTS `{self.config['database']}`")
-                    t_conn.commit()
-                    t_cur.close()
-                    t_conn.close()
-                except Exception as pre_err:
-                    print("[WARN] Pre-creating database skipped:", pre_err)
+        if not self.dsn:
+            print("[WARN] PostgreSQL connection pool deferred (DATABASE_URL not set in environment)")
+            self._pool = None
+            return
 
-            self._pool = pooling.MySQLConnectionPool(
-                pool_name="mypool",
-                pool_size=1 if self.is_vercel else 5,
-                **self.config
-            )
-            print("MySQL pool ready.")
+        try:
+            pool_kwargs = {
+                "minconn": 1,
+                "maxconn": 1 if self.is_vercel else 5,
+                "dsn": self.dsn
+            }
+            if "sslmode=" not in self.dsn:
+                pool_kwargs["sslmode"] = self.sslmode
+
+            self._pool = pg_pool.ThreadedConnectionPool(**pool_kwargs)
+            print("Supabase PostgreSQL pool ready.")
         except Exception as e:
-            print(f"[WARN] MySQL connection pool deferred (MySQL offline or unreachable: {e})")
+            print(f"[WARN] PostgreSQL connection pool deferred (PostgreSQL offline or unreachable: {e})")
             self._pool = None
 
     def get_connection(self):
-        if self._pool is None:
+        if self._pool is None and self.dsn:
             self._init_pool()
         if self._pool is None:
-            raise RuntimeError("Database connection unavailable. Please ensure MySQL is running on port 3306.")
-        return self._pool.get_connection()
+            raise RuntimeError("Database connection unavailable. Please ensure DATABASE_URL is configured in your environment or .env file.")
+        raw_conn = self._pool.getconn()
+        return PooledConnectionWrapper(raw_conn, self._pool)
 
-pool = ResilientMySQLPool(dbconf, is_vercel_env=is_vercel)
+    def closeall(self):
+        if self._pool:
+            self._pool.closeall()
+
+
+pool = ResilientPostgresPool(
+    dsn=os.environ.get("DATABASE_URL"),
+    sslmode=os.getenv("DB_SSLMODE", "require"),
+    is_vercel_env=is_vercel
+)
 
 def init_db(db_pool):
     print("Initializing database schema...")
@@ -159,7 +204,7 @@ def init_db(db_pool):
     try:
         conn = db_pool.get_connection()
     except Exception as conn_err:
-        print(f"[WARN] MySQL not reachable for schema initialization at boot: {conn_err}")
+        print(f"[WARN] PostgreSQL not reachable for schema initialization at boot: {conn_err}")
         return
 
     try:
@@ -179,19 +224,19 @@ def init_db(db_pool):
                 
         # Schema migration ALTER statements to guarantee missing columns are added safely
         alter_statements = [
-            "ALTER TABLE users ADD COLUMN role ENUM('admin', 'user') DEFAULT 'user';",
-            "ALTER TABLE users ADD COLUMN dob VARCHAR(20) DEFAULT '300706';",
-            "ALTER TABLE users ADD COLUMN shikikan_access BOOLEAN DEFAULT FALSE;",
-            "ALTER TABLE users ADD COLUMN shikikan_requested BOOLEAN DEFAULT FALSE;",
-            "ALTER TABLE users ADD COLUMN is_online BOOLEAN DEFAULT FALSE;",
-            "ALTER TABLE users ADD COLUMN last_active DATETIME;",
-            "ALTER TABLE user_profiles ADD COLUMN address VARCHAR(500);",
-            "ALTER TABLE detector_activities ADD COLUMN directory VARCHAR(500);",
-            "ALTER TABLE detector_activities ADD COLUMN target_file VARCHAR(255);",
-            "ALTER TABLE detector_activities ADD COLUMN severity VARCHAR(20) DEFAULT 'MEDIUM';",
-            "ALTER TABLE detector_activities ADD COLUMN event_count INT DEFAULT 1;",
-            "ALTER TABLE detector_activities ADD COLUMN details TEXT;",
-            "ALTER TABLE alerts MODIFY COLUMN action_taken VARCHAR(255) NOT NULL;"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR(20) DEFAULT '300706';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_access BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS shikikan_requested BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500);",
+            "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS directory VARCHAR(500);",
+            "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS target_file VARCHAR(255);",
+            "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS severity VARCHAR(20) DEFAULT 'MEDIUM';",
+            "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS event_count INT DEFAULT 1;",
+            "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS details TEXT;",
+            "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS action_taken VARCHAR(255) DEFAULT 'Marked & Logged';"
         ]
         
         cursor = conn.cursor()
@@ -199,17 +244,19 @@ def init_db(db_pool):
             if stmt.strip():
                 try:
                     cursor.execute(stmt)
+                    conn.commit()
                 except Exception:
-                    pass
+                    try: conn.rollback()
+                    except Exception: pass
                     
         for stmt in alter_statements:
             try:
                 cursor.execute(stmt)
+                conn.commit()
             except Exception:
-                pass
+                try: conn.rollback()
+                except Exception: pass
 
-            
-        conn.commit()
         cursor.close()
         conn.close()
         print("Database schema successfully initialized.")
@@ -335,10 +382,13 @@ def signup():
     if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
         return jsonify({"error": "Password must contain at least one special character."}), 400
 
+    norm_username = (data.get("username") or "").strip().lower()
+    norm_email = (data.get("email") or "").strip().lower()
+
     conn = pool.get_connection()
     try:
-        cursor = conn.cursor(dictionary=True, buffered=True)
-        cursor.execute("SELECT id FROM users WHERE username=%s", (data["username"],))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username=%s", (norm_username,))
         if cursor.fetchone():
             return jsonify({"error": "Username taken"}), 409
 
@@ -346,15 +396,19 @@ def signup():
             cursor.execute("""
                 INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
             """, (
-                data["username"],
+                norm_username,
                 generate_password_hash(data["password"]),
-                data["email"],
-                data["sec_q"],
-                generate_password_hash(data["sec_a"])
+                norm_email,
+                data.get("sec_q"),
+                generate_password_hash(data["sec_a"]) if data.get("sec_a") else None
             ))
+            _ = cursor.fetchone()
             conn.commit()
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             return jsonify({"error": "Username or email already exists"}), 409
     finally:
         try: cursor.close()
@@ -367,15 +421,20 @@ def signup():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json or {}
+    identifier = (data.get("username") or "").strip().lower()
 
     conn = pool.get_connection()
     try:
-        cursor = conn.cursor(dictionary=True, buffered=True)
+        cursor = conn.cursor()
         cursor.execute(
             "SELECT id, username, email, password_hash, dob, role FROM users WHERE username=%s OR email=%s",
-            (data.get("username"), data.get("username"))
+            (identifier, identifier)
         )
         users = cursor.fetchall()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        raise e
     finally:
         try: cursor.close()
         except: pass
@@ -579,6 +638,8 @@ def user_ping():
         conn.commit()
         return jsonify({"status": "ok"}), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
@@ -595,6 +656,8 @@ def request_shikikan():
         conn.commit()
         return jsonify({"status": "Requested access to Shiki-kan successfully"}), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
@@ -641,9 +704,13 @@ def beta_login():
     
     conn = pool.get_connection()
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         cursor.execute("SELECT dob, shikikan_access FROM users WHERE id=%s", (current_user["user_id"],))
         user = cursor.fetchone()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        raise e
     finally:
         try: cursor.close()
         except: pass
@@ -750,18 +817,25 @@ def beta_terminal():
     elif command == "status":
         return jsonify({"output": "System Health:\n  CPU: 12%\n  Memory: 45%\n  Beta Layer: ACTIVE\n  Encryption Lab: SECURE"})
     elif command == "architecture":
-        return jsonify({"output": "SelectShans Architecture:\n  [Layer Alpha] Frontend UI (Public)\n  [Layer Beta] Real-time Core (MFA Secured)\n  [Detector] FolderGuard Agent\n  [DataStore] MySQL Instance"})
+        return jsonify({"output": "SelectShans Architecture:\n  [Layer Alpha] Frontend UI (Public)\n  [Layer Beta] Real-time Core (MFA Secured)\n  [Detector] FolderGuard Agent\n  [DataStore] Supabase PostgreSQL Instance"})
     elif command == "processes":
         conn = pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT process_name, description FROM process_whitelist")
-        processes = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        out = "Whitelisted Processes:\n"
-        for p in processes:
-            out += f"  - {p['process_name']} ({p['description']})\n"
-        return jsonify({"output": out})
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT process_name, description FROM process_whitelist")
+            processes = cursor.fetchall()
+            out = "Whitelisted Processes:\n"
+            for p in processes:
+                out += f"  - {p['process_name']} ({p['description']})\n"
+            return jsonify({"output": out})
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            return jsonify({"error": str(e)}), 500
+        finally:
+            try: cursor.close()
+            except: pass
+            conn.close()
     else:
         return jsonify({"output": f"Command not found: {command}. Type 'help' for available commands."})
 
@@ -841,22 +915,31 @@ def detector_log():
     count = data.get("details", {}).get("count")
 
     conn = pool.get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO detector_logs (user_id, event_type, directory, event_count)
-        VALUES (%s, %s, %s, %s)
-    """, (user_id, event_type, directory, count))
-
-    if event_type == "mass_rename":
+    try:
+        cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
-            VALUES ('CRITICAL', 'FolderGuard Agent', %s, %s, 'Process Flagged & Security Alert Dispatched', FALSE)
-        """, (count, f"Mass rename in {directory}"))
+            INSERT INTO detector_logs (user_id, event_type, directory, event_count)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        """, (user_id, event_type, directory, count))
+        _ = cursor.fetchone()
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        if event_type == "mass_rename":
+            cursor.execute("""
+                INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
+                VALUES ('CRITICAL', 'FolderGuard Agent', %s, %s, 'Process Flagged & Security Alert Dispatched', FALSE)
+                RETURNING id
+            """, (count, f"Mass rename in {directory}"))
+            _ = cursor.fetchone()
+
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
     print("Event stored:", event_type)
 
@@ -935,7 +1018,9 @@ def detector_sync_activities():
             cursor.execute("""
                 INSERT INTO detector_activities (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
             """, (user_id, event_type, directory, target_file, severity, score, detector_id, hostname, event_count, action_taken, process_name, details))
+            _ = cursor.fetchone()
             
             synced_count += 1
             
@@ -949,7 +1034,9 @@ def detector_sync_activities():
                 cursor.execute("""
                     INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
                     VALUES (%s, %s, %s, %s, %s, FALSE)
+                    RETURNING id
                 """, (severity, process_name, event_count, trigger_reason, action_taken))
+                _ = cursor.fetchone()
 
         conn.commit()
     except Exception as e:
@@ -1011,6 +1098,8 @@ def get_detector_activities():
                 r["created_at"] = r["created_at"].isoformat()
         return jsonify(rows), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         print("Error fetching detector activities:", e)
         return jsonify({"error": str(e)}), 500
     finally:
@@ -1154,23 +1243,32 @@ def analyze_file():
         if result.get("verdict") == "MALICIOUS" or (result.get("verdict") == "SUSPICIOUS" and result.get("risk_score", 0) >= 60):
             try:
                 conn = pool.get_connection()
-                cursor = conn.cursor()
-                indicators_str = "; ".join(result.get("indicators", []))
-                cursor.execute("""
-                    INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
-                    VALUES (%s, %s, %s, %s, %s, FALSE)
-                """, (
-                    result.get("severity", "HIGH"),
-                    f"Threat Sandbox: {safe_filename}",
-                    0,
-                    f"Verdict {result.get('verdict')} ({result.get('risk_score')}%): {indicators_str}",
-                    "Flagged in Sandbox Telemetry"
-                ))
-                conn.commit()
-                cursor.close()
-                conn.close()
-            except Exception as db_err:
-                print("Note: Could not log sandbox alert to database:", db_err)
+                try:
+                    cursor = conn.cursor()
+                    indicators_str = "; ".join(result.get("indicators", []))
+                    cursor.execute("""
+                        INSERT INTO alerts (severity, process_name, pid, trigger_reason, action_taken, resolved)
+                        VALUES (%s, %s, %s, %s, %s, FALSE)
+                        RETURNING id
+                    """, (
+                        result.get("severity", "HIGH"),
+                        f"Threat Sandbox: {safe_filename}",
+                        0,
+                        f"Verdict {result.get('verdict')} ({result.get('risk_score')}%): {indicators_str}",
+                        "Flagged in Sandbox Telemetry"
+                    ))
+                    _ = cursor.fetchone()
+                    conn.commit()
+                except Exception as db_err:
+                    try: conn.rollback()
+                    except Exception: pass
+                    print("Note: Could not log sandbox alert to database:", db_err)
+                finally:
+                    try: cursor.close()
+                    except: pass
+                    conn.close()
+            except Exception as pool_err:
+                print("Note: Could not acquire connection for sandbox alert:", pool_err)
 
         return jsonify(result), 200
         
@@ -1196,7 +1294,7 @@ def analyze_file():
 
 def generate_pdf_report(user_id, user_email):
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
 
     # 1. Fetch Detector Logs (without date restriction so data is always present)
     rows = []
@@ -1209,6 +1307,8 @@ def generate_pdf_report(user_id, user_email):
         """, (user_id,))
         rows = cursor.fetchall()
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         print("Detector logs query error:", e)
 
     if not rows:
@@ -1230,6 +1330,8 @@ def generate_pdf_report(user_id, user_email):
         """)
         alerts = cursor.fetchall()
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         print("Alerts query error:", e)
 
     # 3. Fetch Whitelisted Process Count & Unresolved Alerts for Anomaly Metrics
@@ -1241,9 +1343,12 @@ def generate_pdf_report(user_id, user_email):
         cursor.execute("SELECT COUNT(*) as count FROM process_whitelist")
         protected_files = cursor.fetchone()["count"]
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         print("Metrics query error:", e)
 
-    cursor.close()
+    try: cursor.close()
+    except Exception: pass
     conn.close()
 
     anomaly_score = min(99, max(5, unresolved_count * 30 + 15))
@@ -1432,9 +1537,8 @@ def get_security_report_pdf():
     target_user_id = request.args.get('user_id', type=int)
     
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True)
-    
     try:
+        cursor = conn.cursor()
         cursor.execute("SELECT id, email, role FROM users WHERE id = %s", (user_id,))
         current_user = cursor.fetchone()
         is_admin = current_user and current_user.get('role') == 'admin'
@@ -1447,8 +1551,13 @@ def get_security_report_pdf():
         target_id_to_fetch = target_user_id or user_id
         cursor.execute("SELECT id, email FROM users WHERE id = %s", (target_id_to_fetch,))
         user = cursor.fetchone()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        raise e
     finally:
-        cursor.close()
+        try: cursor.close()
+        except Exception: pass
         conn.close()
 
     if user:
@@ -1530,9 +1639,12 @@ def get_realtime_stats():
             "chart_data": chart_data
         }), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
+        try: cursor.close()
+        except Exception: pass
         conn.close()
 
 
@@ -1549,28 +1661,34 @@ def send_daily_summary():
     print("Running daily summary job...")
 
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT user_id
+            FROM detector_logs
+            WHERE DATE(created_at) = CURRENT_DATE - INTERVAL '1 day'
+        """)
 
-    cursor.execute("""
-        SELECT DISTINCT user_id
-        FROM detector_logs
-        WHERE DATE(created_at) = CURDATE() - INTERVAL 1 DAY
-    """)
+        users = cursor.fetchall()
 
-    users = cursor.fetchall()
+        for row in users:
+            cursor.execute("SELECT email FROM users WHERE id=%s", (row["user_id"],))
+            user = cursor.fetchone()
 
-    for row in users:
-        cursor.execute("SELECT email FROM users WHERE id=%s", (row["user_id"],))
-        user = cursor.fetchone()
-
-        if user:
-            pdf_path = generate_pdf_report(row["user_id"], user["email"])
-            if pdf_path:
-                send_pdf_email(user["email"], pdf_path)
-                os.remove(pdf_path)
-
-    cursor.close()
-    conn.close()
+            if user:
+                pdf_path = generate_pdf_report(row["user_id"], user["email"])
+                if pdf_path:
+                    send_pdf_email(user["email"], pdf_path)
+                    try: os.remove(pdf_path)
+                    except Exception: pass
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        print("Error in send_daily_summary:", e)
+    finally:
+        try: cursor.close()
+        except Exception: pass
+        conn.close()
 
 
 # =====================================================
@@ -1656,16 +1774,22 @@ def get_session_stats():
     # If database connection is active, cross-reference with users table
     try:
         conn = pool.get_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE is_online = TRUE AND last_active >= NOW() - INTERVAL 5 MINUTE")
-        db_active = cursor.fetchone()["cnt"]
-        cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE last_active >= NOW() - INTERVAL 30 MINUTE AND last_active < NOW() - INTERVAL 5 MINUTE")
-        db_passive = cursor.fetchone()["cnt"]
-        cursor.close()
-        conn.close()
-        
-        active_count = max(active_count, db_active)
-        passive_count = max(passive_count, db_passive)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE is_online = TRUE AND last_active >= NOW() - INTERVAL '5 minutes'")
+            db_active = cursor.fetchone()["cnt"]
+            cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE last_active >= NOW() - INTERVAL '30 minutes' AND last_active < NOW() - INTERVAL '5 minutes'")
+            db_passive = cursor.fetchone()["cnt"]
+            
+            active_count = max(active_count, db_active)
+            passive_count = max(passive_count, db_passive)
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        finally:
+            try: cursor.close()
+            except Exception: pass
+            conn.close()
     except Exception:
         pass
 
@@ -1773,11 +1897,17 @@ def extend_session():
     # Update database session activity if connection available
     try:
         conn = pool.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET is_online = TRUE, last_active = NOW() WHERE id = %s", (user_id,))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET is_online = TRUE, last_active = NOW() WHERE id = %s", (user_id,))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        finally:
+            try: cursor.close()
+            except Exception: pass
+            conn.close()
     except Exception:
         pass
 
@@ -1840,9 +1970,8 @@ def get_alerts():
     user_id = g.user['user_id']
     
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     try:
-            
         cursor.execute("SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 100")
         alerts = cursor.fetchall()
         for a in alerts:
@@ -1850,9 +1979,12 @@ def get_alerts():
                 a["timestamp"] = a["timestamp"].isoformat()
         return jsonify(alerts), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
+        try: cursor.close()
+        except Exception: pass
         conn.close()
 
 
@@ -1864,16 +1996,18 @@ def resolve_alert(alert_id):
     user_id = g.user['user_id']
     
     conn = pool.get_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     try:
-            
         cursor.execute("UPDATE alerts SET resolved = TRUE WHERE id = %s", (alert_id,))
         conn.commit()
         return jsonify({"status": "success", "message": f"Alert {alert_id} resolved"}), 200
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
+        try: cursor.close()
+        except Exception: pass
         conn.close()
 
 

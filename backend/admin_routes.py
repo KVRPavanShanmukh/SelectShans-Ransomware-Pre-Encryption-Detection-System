@@ -42,12 +42,15 @@ def register_admin_routes(app, pool):
                 cursor.execute("""
                     INSERT INTO admin_settings (user_id, log_retention_days)
                     VALUES (%s, %s)
-                    ON DUPLICATE KEY UPDATE log_retention_days = VALUES(log_retention_days)
+                    ON CONFLICT (user_id) DO UPDATE SET log_retention_days = EXCLUDED.log_retention_days
+                    RETURNING id
                 """, (user_id, days))
+                _ = cursor.fetchone()
                 conn.commit()
                 
-                cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)",
+                cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s) RETURNING id",
                              (user_id, 'LOG_RETENTION_CHANGED', f'Changed log retention to {days} days'))
+                _ = cursor.fetchone()
                 conn.commit()
                 
                 return jsonify({"status": "success", "days": days}), 200
@@ -57,6 +60,8 @@ def register_admin_routes(app, pool):
                 retention_days = result['log_retention_days'] if result else 30
                 return jsonify({"days": retention_days}), 200
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             print(f"Error handling log retention: {e}")
             return jsonify({"error": str(e)}), 500
         finally:
@@ -123,12 +128,14 @@ def register_admin_routes(app, pool):
             
             # Log audit event
             action_desc = f"{'Granted' if shikikan_access else 'Revoked'} Shiki-kan access for User #{target_id}"
-            cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)",
+            cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s) RETURNING id",
                          (user_id, 'PERMISSION_UPDATED', action_desc))
-            
+            _ = cursor.fetchone()
             conn.commit()
             return jsonify({"status": "success"}), 200
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             return jsonify({"error": str(e)}), 500
         finally:
             cursor.close()
@@ -154,14 +161,15 @@ def register_admin_routes(app, pool):
             cursor.execute("DELETE FROM alerts")
             
             # Log the action
-            cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)",
+            cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s) RETURNING id",
                          (user_id, 'DATA_CLEARED', 'All data purged'))
-            
+            _ = cursor.fetchone()
             conn.commit()
             return jsonify({"status": "success", "message": "All data cleared"}), 200
         except Exception as e:
             print(f"Error clearing data: {e}")
-            conn.rollback()
+            try: conn.rollback()
+            except Exception: pass
             return jsonify({"error": str(e)}), 500
         finally:
             cursor.close()
@@ -197,16 +205,17 @@ def register_admin_routes(app, pool):
                     update_params = []
                     
                     if username and username.strip():
+                        norm_username = username.strip().lower()
                         # Check if username is taken by another user
-                        cursor.execute("SELECT id FROM users WHERE username = %s AND id != %s", (username.strip(), user_id))
+                        cursor.execute("SELECT id FROM users WHERE username = %s AND id != %s", (norm_username, user_id))
                         if cursor.fetchone():
                             return jsonify({"error": "Username already taken by another user"}), 409
                         update_fields.append("username = %s")
-                        update_params.append(username.strip())
+                        update_params.append(norm_username)
                         
                     if dob is not None:
                         update_fields.append("dob = %s")
-                        update_params.append(dob.strip())
+                        update_params.append(str(dob).strip())
                         
                     if new_password and new_password.strip():
                         update_fields.append("password_hash = %s")
@@ -218,21 +227,24 @@ def register_admin_routes(app, pool):
                         cursor.execute(update_query, tuple(update_params))
                 
                 # 2. Update user_profiles table (Note: email is locked and NOT updated)
+                norm_notif_email = notification_email.strip().lower() if notification_email and notification_email.strip() else None
                 cursor.execute("""
                     INSERT INTO user_profiles (user_id, full_name, phone, organization, address, notification_email)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE 
-                        full_name = VALUES(full_name),
-                        phone = VALUES(phone),
-                        organization = VALUES(organization),
-                        address = VALUES(address),
-                        notification_email = VALUES(notification_email)
-                """, (user_id, full_name, phone, organization, address, notification_email))
-                
+                    ON CONFLICT (user_id) DO UPDATE SET 
+                        full_name = EXCLUDED.full_name,
+                        phone = EXCLUDED.phone,
+                        organization = EXCLUDED.organization,
+                        address = EXCLUDED.address,
+                        notification_email = EXCLUDED.notification_email
+                    RETURNING id
+                """, (user_id, full_name, phone, organization, address, norm_notif_email))
+                _ = cursor.fetchone()
                 conn.commit()
                 
-                cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s)",
+                cursor.execute("INSERT INTO audit_log (user_id, action, description) VALUES (%s, %s, %s) RETURNING id",
                              (user_id, 'PROFILE_UPDATED', 'User profile updated (Username, Name, Phone, DOB, Address)'))
+                _ = cursor.fetchone()
                 conn.commit()
                 
                 return jsonify({"status": "success", "message": "Profile updated successfully"}), 200
@@ -261,6 +273,8 @@ def register_admin_routes(app, pool):
                 
                 return jsonify(response_data), 200
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             print(f"Error handling profile: {e}")
             return jsonify({"error": str(e)}), 500
         finally:
@@ -431,6 +445,8 @@ def register_admin_routes(app, pool):
             )
 
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             print(f"Error generating audit log: {e}")
             import traceback
             traceback.print_exc()
