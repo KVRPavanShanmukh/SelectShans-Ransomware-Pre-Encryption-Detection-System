@@ -30,7 +30,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 DEFAULT_CONFIG = {
     "api_base": "http://127.0.0.1:5000",
     "token": "demo_token",
-    "email": "user@selectshans.sec",
+    "email": "kakarlapavanshanmukh@gmail.com",
     "user_id": 1,
     "time_window_seconds": 10.0,
     "threshold_rename": 5,
@@ -141,7 +141,7 @@ class MultiFolderGuardController:
 
         self.api_base = config.get("api_base") or config.get("api_url", "http://127.0.0.1:5000")
         self.token = config.get("token") or config.get("detector_token", "")
-        self.user_email = config.get("email", "user@selectshans.sec")
+        self.user_email = config.get("email", "kakarlapavanshanmukh@gmail.com")
         self.hostname = socket.gethostname()
         self.detector_id = str(uuid.uuid4())
 
@@ -297,7 +297,7 @@ class FolderGuardApp:
         cred_strip.pack(fill=tk.X, padx=16, pady=(12, 0))
 
         api_display = self.config.get("api_base") or self.config.get("api_url", "http://127.0.0.1:5000")
-        email_display = self.config.get("email", "user@selectshans.sec")
+        email_display = self.config.get("email", "kakarlapavanshanmukh@gmail.com")
         user_id_display = str(self.config.get("user_id", 1))
         token_present = bool(self.config.get("token") or self.config.get("detector_token"))
 

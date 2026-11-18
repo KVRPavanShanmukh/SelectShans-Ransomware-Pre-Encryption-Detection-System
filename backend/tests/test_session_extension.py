@@ -34,7 +34,7 @@ class TestPassiveSessionManager(unittest.TestCase):
         token = create_token(
             user_id=user_id,
             username="analyst_test",
-            email="analyst@selectshans.sec",
+            email="kakarlapavanshanmukh@gmail.com",
             expiry_timedelta=timedelta(seconds=(exp - datetime.now(timezone.utc)).total_seconds())
         )
         return token

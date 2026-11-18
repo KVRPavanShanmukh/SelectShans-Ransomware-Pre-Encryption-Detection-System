@@ -317,7 +317,7 @@ def register_admin_routes(app, pool):
                     "id": 1,
                     "user_id": user_id or 1,
                     "username": "SOC-Admin",
-                    "email": "admin@selectshans.sec",
+                    "email": "kakarlapavanshanmukh@gmail.com",
                     "action": "SYSTEM_INITIALIZED",
                     "description": "SOC Sentinel Audit System active and monitoring.",
                     "ip_address": "127.0.0.1",

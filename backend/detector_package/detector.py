@@ -28,7 +28,7 @@ CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "api_base": "http://127.0.0.1:5000",
     "token": "demo_token",
-    "email": "user@selectshans.sec",
+    "email": "kakarlapavanshanmukh@gmail.com",
     "time_window_seconds": 10.0,
     "threshold_rename": 5,
     "threshold_write": 10,

@@ -30,7 +30,7 @@ class TestPhase2Integration(unittest.TestCase):
         self.app.config['TESTING'] = True
         self.temp_dir = tempfile.mkdtemp()
         self.user_id = 1
-        self.email = "soc_admin@selectshans.sec"
+        self.email = "kakarlapavanshanmukh@gmail.com"
         self.detector_token = create_detector_token(self.user_id, self.email)
         self.jwt_token = create_token(self.user_id, "soc_admin", self.email, role="admin")
 

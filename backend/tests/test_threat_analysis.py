@@ -37,7 +37,7 @@ class TestThreatAnalysisModule(unittest.TestCase):
             {
                 "user_id": 1,
                 "username": "sec_analyst",
-                "email": "analyst@selectshans.sec",
+                "email": "kakarlapavanshanmukh@gmail.com",
                 "exp": datetime.now(timezone.utc) + timedelta(hours=1)
             },
             os.getenv("JWT_SECRET", "sentinelstream_super_secure_random_string_change_this_12345"),

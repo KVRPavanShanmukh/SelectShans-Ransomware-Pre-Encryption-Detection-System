@@ -35,14 +35,14 @@ class TestPhase1Remediation(unittest.TestCase):
     # 2. Authentication Role Preservation and JWT
     def test_02_jwt_role_preservation(self):
         # Admin token
-        admin_token = create_token(user_id=1, username="admin_test", email="admin@selectshans.sec", role="admin")
+        admin_token = create_token(user_id=1, username="admin_test", email="kakarlapavanshanmukh@gmail.com", role="admin")
         admin_payload = verify_token(admin_token)
         self.assertIsNotNone(admin_payload)
         self.assertEqual(admin_payload.get("role"), "admin")
         self.assertEqual(admin_payload.get("user_id"), 1)
 
         # User token
-        user_token = create_token(user_id=2, username="user_test", email="user@selectshans.sec", role="user")
+        user_token = create_token(user_id=2, username="user_test", email="kakarlapavanshanmukh@gmail.com", role="user")
         user_payload = verify_token(user_token)
         self.assertIsNotNone(user_payload)
         self.assertEqual(user_payload.get("role"), "user")
@@ -51,7 +51,7 @@ class TestPhase1Remediation(unittest.TestCase):
     def test_03_otp_verification_returns_role(self):
         import hashlib
         from datetime import timezone, timedelta
-        test_email = "soc_admin@selectshans.sec"
+        test_email = "kakarlapavanshanmukh@gmail.com"
 
         mock_cursor = MagicMock()
         mock_cursor.fetchone.side_effect = [
@@ -93,7 +93,7 @@ class TestPhase1Remediation(unittest.TestCase):
 
     # 3. Detector Package Download Integrity
     def test_04_detector_download_package(self):
-        token = create_detector_token(user_id=42, email="analyst@selectshans.sec")
+        token = create_detector_token(user_id=42, email="kakarlapavanshanmukh@gmail.com")
         response = self.client.get(f'/api/detector-download?token={token}')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/zip")
@@ -107,7 +107,7 @@ class TestPhase1Remediation(unittest.TestCase):
         # Verify injected config.json
         config = json.loads(zf.read("config.json").decode('utf-8'))
         self.assertEqual(config.get("user_id"), 42)
-        self.assertEqual(config.get("email"), "analyst@selectshans.sec")
+        self.assertEqual(config.get("email"), "kakarlapavanshanmukh@gmail.com")
         self.assertEqual(config.get("token"), token)
         self.assertNotIn("JWT_SECRET", config)
         self.assertNotIn("DB_PASSWORD", config)
@@ -140,7 +140,7 @@ class TestPhase1Remediation(unittest.TestCase):
         mock_conn.cursor.return_value = mock_cursor
 
         with patch('app.pool.get_connection', return_value=mock_conn):
-            pdf_path = generate_pdf_report(user_id=1, user_email="test@selectshans.sec")
+            pdf_path = generate_pdf_report(user_id=1, user_email="kakarlapavanshanmukh@gmail.com")
             self.assertIsNotNone(pdf_path)
             self.assertTrue(os.path.exists(pdf_path), f"Generated PDF path {pdf_path} does not exist")
             
@@ -241,18 +241,18 @@ class TestPhase1Remediation(unittest.TestCase):
         mock_conn.cursor.return_value = mock_cursor
 
         # Store challenge (SHA-256 hashed)
-        store_auth_challenge(mock_conn, "analyst@selectshans.sec", "login", "123456", "secretpsk", expiry_minutes=3)
+        store_auth_challenge(mock_conn, "kakarlapavanshanmukh@gmail.com", "login", "123456", "secretpsk", expiry_minutes=3)
         self.assertIn("challenge", fake_store)
         self.assertEqual(fake_store["challenge"]["otp_hash"], hashlib.sha256(b"123456").hexdigest())
 
         # Verify incorrect OTP increments attempts
-        is_valid, err_msg, code = verify_auth_challenge(mock_conn, "analyst@selectshans.sec", "login", "000000", "secretpsk")
+        is_valid, err_msg, code = verify_auth_challenge(mock_conn, "kakarlapavanshanmukh@gmail.com", "login", "000000", "secretpsk")
         self.assertFalse(is_valid)
         self.assertEqual(code, 401)
         self.assertEqual(fake_store["challenge"]["attempts"], 1)
 
         # Verify correct OTP succeeds and immediately purges row
-        is_valid, err_msg, code = verify_auth_challenge(mock_conn, "analyst@selectshans.sec", "login", "123456", "secretpsk")
+        is_valid, err_msg, code = verify_auth_challenge(mock_conn, "kakarlapavanshanmukh@gmail.com", "login", "123456", "secretpsk")
         self.assertTrue(is_valid)
         self.assertEqual(code, 200)
         self.assertNotIn("challenge", fake_store)
@@ -263,7 +263,7 @@ class TestPhase1Remediation(unittest.TestCase):
 
         # In dev mode without keys, non-blocking fallback returns True without crashing
         with patch.dict(os.environ, {"APP_ENV": "development", "RESEND_API_KEY": "", "BREVO_API_KEY": "", "MAIL_PASS": ""}):
-            result = send_email_safe("user@selectshans.sec", "Test Subject", "Test Body")
+            result = send_email_safe("kakarlapavanshanmukh@gmail.com", "Test Subject", "Test Body")
             self.assertTrue(result)
 
     # 10. Stale Telemetry Retention Pruning (30-Day Storage Guard)

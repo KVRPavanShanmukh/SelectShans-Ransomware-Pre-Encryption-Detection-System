@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock } from 'lucide-react';
 import './SessionManager.css';
 
 // Hard maximum session duration: 10 minutes (600 seconds)
@@ -48,9 +47,6 @@ const SessionManager = ({ jwtToken, onLogout }) => {
   };
 
   const [expiryEpoch, setExpiryEpoch] = useState(resolveExpiryEpoch);
-  const [timeLeft, setTimeLeft] = useState(() =>
-    Math.max(0, resolveExpiryEpoch() - Math.floor(Date.now() / 1000))
-  );
 
   // Sync expiry whenever a new token arrives
   useEffect(() => {
@@ -58,10 +54,10 @@ const SessionManager = ({ jwtToken, onLogout }) => {
     const nextExpiry = resolveExpiryEpoch();
     localStorage.setItem('session_expires_at_epoch', nextExpiry.toString());
     setExpiryEpoch(nextExpiry);
-    setTimeLeft(Math.max(0, nextExpiry - Math.floor(Date.now() / 1000)));
   }, [jwtToken]);
 
-  // Strict countdown: immediately log out at 0 seconds
+  // Strict 10-minute session lifecycle: automatically logs out after 10 minutes in the background
+  // No visual timer/clock is rendered in the user interface
   useEffect(() => {
     const triggerAutoLogout = () => {
       if (hasLoggedOutRef.current) return;
@@ -78,7 +74,6 @@ const SessionManager = ({ jwtToken, onLogout }) => {
     const tick = () => {
       const nowSec = Math.floor(Date.now() / 1000);
       const remaining = Math.max(0, expiryEpoch - nowSec);
-      setTimeLeft(remaining);
 
       if (remaining <= 0) {
         triggerAutoLogout();
@@ -90,30 +85,8 @@ const SessionManager = ({ jwtToken, onLogout }) => {
     return () => clearInterval(timer);
   }, [expiryEpoch, onLogout]);
 
-  const minutesRemaining = Math.floor(timeLeft / 60);
-  const secondsRemaining = (timeLeft % 60).toString().padStart(2, '0');
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        background: timeLeft <= 60 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(0, 124, 195, 0.12)',
-        border: `1px solid ${timeLeft <= 60 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(0, 124, 195, 0.3)'}`,
-        padding: '4px 10px',
-        borderRadius: 4,
-        fontSize: '0.72rem',
-        fontFamily: 'JetBrains Mono, monospace',
-        color: timeLeft <= 60 ? '#ef4444' : '#007CC3',
-        userSelect: 'none'
-      }}
-      title="Session expires automatically when timer reaches 0:00"
-    >
-      <Clock size={12} color={timeLeft <= 60 ? '#ef4444' : '#007CC3'} />
-      <span>{minutesRemaining}:{secondsRemaining}</span>
-    </div>
-  );
+  // Headless manager: enforces strict 10-minute session duration without rendering UI elements
+  return null;
 };
 
 export default SessionManager;

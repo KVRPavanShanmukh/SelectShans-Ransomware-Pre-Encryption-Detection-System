@@ -504,7 +504,7 @@ def send_email_via_https_api(to_email, subject, body, attachment_path=None, html
     if not resend_api_key and not brevo_api_key:
         return None  # Neither HTTPS provider configured
 
-    mail_from = os.getenv("MAIL_FROM") or os.getenv("MAIL_USER") or "no-reply@selectshans.sec"
+    mail_from = os.getenv("MAIL_FROM") or os.getenv("MAIL_USER") or "kakarlapavanshanmukh@gmail.com"
 
     attachment_b64 = None
     attachment_filename = None
@@ -552,7 +552,7 @@ def send_email_via_https_api(to_email, subject, body, attachment_path=None, html
 
     # 2. Brevo API (https://api.brevo.com/v3/smtp/email)
     if brevo_api_key:
-        sender_email = mail_from if "@" in mail_from else "no-reply@selectshans.sec"
+        sender_email = mail_from if "@" in mail_from else "kakarlapavanshanmukh@gmail.com"
         payload = {
             "sender": {"name": "SelectShans SOC", "email": sender_email},
             "to": [{"email": to_email}],
@@ -1818,7 +1818,7 @@ def get_security_report_pdf():
         u_email = user["email"]
     else:
         u_id = user_id
-        u_email = g.user.get("email", "user@selectshans.sec")
+        u_email = g.user.get("email", "kakarlapavanshanmukh@gmail.com")
 
     try:
         pdf_path = generate_pdf_report(u_id, u_email)
