@@ -15,6 +15,20 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+*password*
+*Password*
+*credential*
+*Credential*
+*secret*.txt
+*.credentials
+
+# =========================
+# Supabase
+# =========================
+.supabase/
+supabase/.branches/
+supabase/.temp/
+supabase/seed.sql.tmp
 
 # =========================
 # .NET / C#
