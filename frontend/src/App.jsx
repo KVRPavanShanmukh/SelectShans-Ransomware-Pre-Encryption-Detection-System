@@ -94,7 +94,7 @@ function App() {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${jwtToken}` }
           });
-        } catch (e) {}
+        } catch (e) { }
       };
       ping(); // initial
       const interval = setInterval(ping, 60000); // every minute
@@ -106,7 +106,7 @@ function App() {
   useEffect(() => {
     const storedToken = sessionStorage.getItem('jwtToken');
     const storedUserId = sessionStorage.getItem('userId');
-    
+
     if (storedToken) {
       const payload = decodeJwtPayload(storedToken);
       // Evict expired session tokens immediately
@@ -147,7 +147,7 @@ function App() {
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           const newToken = data.token;
@@ -165,7 +165,7 @@ function App() {
         console.error('Token refresh failed:', error);
       }
     }, 25 * 60 * 1000); // Refresh every 25 minutes
-    
+
     setTokenRefreshInterval(refreshInterval);
   };
 
@@ -199,11 +199,13 @@ function App() {
     sessionStorage.removeItem('userId');
     sessionStorage.removeItem('user_role');
     sessionStorage.removeItem('detector_token');
+    sessionStorage.removeItem('session_expires_at_epoch');
     // Purge any legacy localStorage items to prevent stale auth leakage
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('userId');
     localStorage.removeItem('user_role');
     localStorage.removeItem('detector_token');
+    localStorage.removeItem('session_expires_at_epoch');
 
     setJwtToken(null);
     setBetaToken(null);
@@ -211,11 +213,8 @@ function App() {
     setIsAuthenticated(false);
     setIsAdmin(false);
     setAdminViewMode('admin');
-    if (tokenRefreshInterval) {
-      clearInterval(tokenRefreshInterval);
-    }
   };
-  
+
   const handleRequestShikikan = async () => {
     try {
       const response = await fetch(`${API_URL}/api/users/request-shikikan`, {
@@ -275,7 +274,7 @@ function App() {
               >
                 Switch to Threat Console
               </button>
-              <button 
+              <button
                 onClick={handleLogout}
                 style={{ background: '#ff4d4d', color: '#1a202c', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
               >
@@ -302,7 +301,7 @@ function App() {
           <div className="search-bar">
             <input type="text" placeholder="Search logs, hashes, PIDs, paths..." />
           </div>
-          
+
           {isAdmin && (
             <button
               onClick={() => setAdminViewMode('admin')}
@@ -312,9 +311,9 @@ function App() {
             </button>
           )}
 
-          <SessionManager 
-            jwtToken={jwtToken} 
-            onLogout={handleLogout} 
+          <SessionManager
+            jwtToken={jwtToken}
+            onLogout={handleLogout}
             onTokenUpdated={(newToken) => {
               sessionStorage.setItem('jwtToken', newToken);
               setJwtToken(newToken);
@@ -322,7 +321,7 @@ function App() {
               const decodedRole = payload?.role || 'user';
               sessionStorage.setItem('user_role', decodedRole);
               setIsAdmin(decodedRole === 'admin');
-            }} 
+            }}
           />
           <div className="user-profile" style={{ position: 'relative' }}>
             <span className="status-badge">{isAdmin ? 'Admin: Active' : 'User: Active'}</span>
@@ -385,23 +384,23 @@ function App() {
             {!adminTab && activeTab === 'protection' && <ActiveShield />}
             {!adminTab && activeTab === 'encryption' && <EncryptionLab />}
             {!adminTab && activeTab === 'soar' && <SOAR userId={userId} apiBase={API_URL} />}
-            {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} /> }
-            
+            {!adminTab && activeTab === 'settings' && <Settings userId={userId} apiBase={API_URL} onNavigate={handleAdminNavigation} />}
+
             {!adminTab && activeTab === 'beta' && !betaToken && (
-              <BetaLogin 
-                jwtToken={jwtToken} 
-                onBetaLoginSuccess={(token) => setBetaToken(token)} 
-                onCancel={() => setActiveTab('dashboard')} 
+              <BetaLogin
+                jwtToken={jwtToken}
+                onBetaLoginSuccess={(token) => setBetaToken(token)}
+                onCancel={() => setActiveTab('dashboard')}
               />
             )}
             {!adminTab && activeTab === 'beta' && betaToken && (
-              <BetaTerminal 
-                jwtToken={jwtToken} 
-                betaToken={betaToken} 
-                onClose={() => setActiveTab('dashboard')} 
+              <BetaTerminal
+                jwtToken={jwtToken}
+                betaToken={betaToken}
+                onClose={() => setActiveTab('dashboard')}
               />
             )}
-            
+
             {adminTab === 'profile-settings' && <ProfileSettings userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
             {adminTab === 'audit-log' && <AuditLog userId={userId} apiBase={API_URL} onBack={() => setAdminTab(null)} />}
           </Suspense>

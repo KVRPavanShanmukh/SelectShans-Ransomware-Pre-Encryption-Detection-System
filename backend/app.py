@@ -247,10 +247,8 @@ def init_db(db_pool):
             if stmt.strip():
                 try:
                     cursor.execute(stmt)
-                    conn.commit()
                 except Exception:
-                    try: conn.rollback()
-                    except Exception: pass
+                    pass
                     
         for stmt in alter_statements:
             try:
@@ -1819,112 +1817,7 @@ def get_session_stats():
 
 @app.route('/api/session/extend', methods=['POST'])
 def extend_session():
-    """
-    Extends a session by a server-authoritative random duration between 1 and 10 minutes.
-    Enforces a strict cumulative maximum extension policy of 10 minutes (600 seconds).
-    Rejects expired tokens beyond the allowed 60-second grace evaluation window.
-    """
-    auth_header = request.headers.get('Authorization', '')
-    token = None
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:].strip()
-    else:
-        try:
-            data = request.get_json(silent=True) or {}
-            token = data.get('token')
-        except Exception:
-            token = None
-
-    if not token or token in ('null', 'undefined', ''):
-        return jsonify({"error": "Authentication token required for session extension."}), 401
-
-    # First attempt standard validation
-    payload = verify_token(token)
-    token_is_expired = False
-    
-    if not payload:
-        # Check if token is within a short 60-second grace window after expiry to allow immediate user prompt extension
-        unverified_payload = decode_token_ignore_exp(token)
-        if not unverified_payload or 'exp' not in unverified_payload:
-            return jsonify({"error": "Session token is invalid. Please log in again."}), 401
-        
-        now_epoch = datetime.now(timezone.utc).timestamp()
-        exp_epoch = unverified_payload['exp']
-        # If expired by more than 60 seconds grace period, strictly reject revival
-        if (now_epoch - exp_epoch) > 60:
-            return jsonify({
-                "error": "Session has expired beyond the allowable grace period. You must log in again.",
-                "expired": True
-            }), 401
-        
-        payload = unverified_payload
-        token_is_expired = True
-
-    user_id = payload.get('user_id')
-    username = payload.get('username')
-    email = payload.get('email')
-
-    if not user_id:
-        return jsonify({"error": "Invalid token identity."}), 401
-
-    with _session_activity_lock:
-        current_cumulative = _user_cumulative_extension.get(user_id, 0)
-        remaining_cumulative = 600 - current_cumulative  # 600s = 10 minutes max total
-
-        if remaining_cumulative <= 0:
-            return jsonify({
-                "error": "Session extension limit reached. The maximum cumulative extension of 10 minutes has been exhausted.",
-                "cumulative_limit_reached": True,
-                "cumulative_extended_seconds": current_cumulative
-            }), 403
-
-        # Generate server-authoritative random extension between 1 and min(10, remaining_minutes)
-        max_possible_minutes = max(1, remaining_cumulative // 60)
-        # Select uniformly at random between 1 and max_possible_minutes
-        granted_minutes = random.randint(1, min(10, max_possible_minutes))
-        granted_seconds = granted_minutes * 60
-        
-        # Apply bounds check
-        if granted_seconds > remaining_cumulative:
-            granted_seconds = remaining_cumulative
-            granted_minutes = max(1, granted_seconds // 60)
-
-        _user_cumulative_extension[user_id] = current_cumulative + granted_seconds
-        _active_user_last_seen[user_id] = datetime.now(timezone.utc)
-
-    # Issue server-authoritative token with the newly extended expiry
-    new_token = create_token(user_id, username, email, expiry_timedelta=timedelta(seconds=granted_seconds))
-    now_epoch = datetime.now(timezone.utc).timestamp()
-    new_expires_at = now_epoch + granted_seconds
-
-    # Update database session activity if connection available
-    try:
-        conn = pool.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET is_online = TRUE, last_active = NOW() WHERE id = %s", (user_id,))
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except Exception: pass
-        finally:
-            try: cursor.close()
-            except Exception: pass
-            conn.close()
-    except Exception:
-        pass
-
-    return jsonify({
-        "status": "success",
-        "message": f"Session extended by {granted_minutes} minutes.",
-        "token": new_token,
-        "extension_minutes": granted_minutes,
-        "extension_seconds": granted_seconds,
-        "expires_in": granted_seconds,
-        "expires_at_epoch": int(new_expires_at),
-        "cumulative_extended_minutes": round(_user_cumulative_extension.get(user_id, 0) / 60, 1),
-        "remaining_cumulative_minutes": max(0, round((600 - _user_cumulative_extension.get(user_id, 0)) / 60, 1))
-    }), 200
+    return jsonify({"error": "Session extension is disabled. Please log in again."}), 403
 
 @app.route('/api/token/refresh', methods=['POST'])
 def refresh_jwt_token():
