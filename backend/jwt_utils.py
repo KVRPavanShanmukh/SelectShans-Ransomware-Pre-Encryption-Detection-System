@@ -14,10 +14,10 @@ def get_jwt_secret():
     return secret
 
 JWT_ALGORITHM = 'HS256'
-MAX_SESSION_SECONDS = 450  # 7.5 minutes hard limit
+MAX_SESSION_SECONDS = 600  # 10 minutes hard limit
 
 def get_token_expiry_timedelta():
-    expires_in = os.getenv("JWT_EXPIRES_IN", "450s").strip().lower()
+    expires_in = os.getenv("JWT_EXPIRES_IN", "600s").strip().lower()
     if expires_in.endswith('s'):
         seconds = int(expires_in[:-1])
     elif expires_in.endswith('m'):
@@ -31,7 +31,7 @@ def get_token_expiry_timedelta():
     return timedelta(seconds=min(seconds, MAX_SESSION_SECONDS))
 
 def create_token(user_id, username, email, role='user', expiry_timedelta=None):
-    """Create JWT token with strict 7.5-minute maximum expiry"""
+    """Create JWT token with strict 10-minute maximum expiry"""
     delta = expiry_timedelta if expiry_timedelta is not None else get_token_expiry_timedelta()
     payload = {
         'user_id': user_id,

@@ -890,7 +890,7 @@ def verify():
         "username": user["username"],
         "email": user["email"],
         "role": role,
-        "expires_in": 30 * 60  # 30 minutes in seconds
+        "expires_in": 600  # 10 minutes in seconds (600s)
     }), 200
 
 

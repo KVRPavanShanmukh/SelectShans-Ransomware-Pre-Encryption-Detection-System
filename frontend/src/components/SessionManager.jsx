@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Clock } from 'lucide-react';
 import './SessionManager.css';
 
-// Hard maximum session duration: 7.5 minutes (450 seconds)
-const MAX_SESSION_SECONDS = 450;
+// Hard maximum session duration: 10 minutes (600 seconds)
+const MAX_SESSION_SECONDS = 600;
 
 const parseJwtExp = (token) => {
   try {
