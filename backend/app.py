@@ -13,6 +13,10 @@ import random
 import jwt
 import threading
 import time
+import html
+import urllib.request
+import urllib.error
+
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -237,7 +241,21 @@ def init_db(db_pool):
             "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS severity VARCHAR(20) DEFAULT 'MEDIUM';",
             "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS event_count INT DEFAULT 1;",
             "ALTER TABLE detector_activities ADD COLUMN IF NOT EXISTS details TEXT;",
-            "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS action_taken VARCHAR(255) DEFAULT 'Marked & Logged';"
+            "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS action_taken VARCHAR(255) DEFAULT 'Marked & Logged';",
+            """
+            CREATE TABLE IF NOT EXISTS pending_auth_challenges (
+                id SERIAL PRIMARY KEY,
+                identifier VARCHAR(255) NOT NULL,
+                challenge_type VARCHAR(32) NOT NULL,
+                otp_hash VARCHAR(128) NOT NULL,
+                psk_hash VARCHAR(128) NOT NULL,
+                attempts INT NOT NULL DEFAULT 0,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_pending_auth_ident_type ON pending_auth_challenges (identifier, challenge_type);",
+            "CREATE INDEX IF NOT EXISTS idx_pending_auth_expires_at ON pending_auth_challenges (expires_at);"
         ]
         
         cursor = conn.cursor()
@@ -259,8 +277,178 @@ def init_db(db_pool):
         cursor.close()
         conn.close()
         print("Database schema successfully initialized.")
+        prune_stale_telemetry_records(db_pool)
     except Exception as e:
         print("Failed to initialize database schema:", e)
+
+# Storage & Retention Management
+def prune_stale_telemetry_records(db_pool):
+    """
+    Prunes records older than 30 days from high-volume telemetry tables
+    to conserve PostgreSQL database storage on free-tier instances.
+    """
+    try:
+        conn = db_pool.get_connection()
+    except Exception as e:
+        print(f"[STORAGE] Stale telemetry retention pruning skipped (database unreachable): {e}")
+        return 0
+
+    deleted_counts = {}
+    try:
+        cursor = conn.cursor()
+        for table, col in [
+            ("detector_logs", "created_at"),
+            ("detector_activities", "created_at"),
+            ("system_health_snapshots", "timestamp")
+        ]:
+            try:
+                cursor.execute(f"DELETE FROM {table} WHERE {col} < CURRENT_TIMESTAMP - INTERVAL '30 days';")
+                deleted_counts[table] = cursor.rowcount
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+        cursor.close()
+        total_pruned = sum(deleted_counts.values())
+        if total_pruned > 0:
+            print(f"[STORAGE] Pruned {total_pruned} telemetry rows older than 30 days: {deleted_counts}")
+        return total_pruned
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        print(f"[STORAGE] Error pruning stale telemetry records: {e}")
+        return 0
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def purge_expired_auth_challenges(conn):
+    """Deletes expired challenges from PostgreSQL to keep Supabase storage compact."""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pending_auth_challenges WHERE expires_at <= CURRENT_TIMESTAMP;")
+        conn.commit()
+        cursor.close()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def store_auth_challenge(conn, identifier, challenge_type, otp, psk, expiry_minutes=3):
+    """
+    Stores SHA-256 hashed OTP and PSK challenges in PostgreSQL (never plaintext).
+    Automatically purges expired challenges to conserve storage.
+    """
+    ident = identifier.strip().lower()
+    otp_hash = hashlib.sha256(str(otp).strip().encode()).hexdigest()
+    psk_hash = hashlib.sha256(str(psk).strip().encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes)
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM pending_auth_challenges WHERE expires_at <= CURRENT_TIMESTAMP;")
+    except Exception:
+        pass
+
+    try:
+        cursor.execute(
+            "DELETE FROM pending_auth_challenges WHERE LOWER(identifier) = %s AND challenge_type = %s;",
+            (ident, challenge_type)
+        )
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    cursor.execute(
+        """
+        INSERT INTO pending_auth_challenges (identifier, challenge_type, otp_hash, psk_hash, attempts, expires_at, created_at)
+        VALUES (%s, %s, %s, %s, 0, %s, CURRENT_TIMESTAMP);
+        """,
+        (ident, challenge_type, otp_hash, psk_hash, expires_at)
+    )
+    conn.commit()
+    cursor.close()
+
+
+def verify_auth_challenge(conn, identifier, challenge_type, candidate_otp, candidate_psk):
+    """
+    Validates candidate OTP/PSK against SHA-256 hashes in pending_auth_challenges.
+    Enforces maximum 3 attempts and immediately purges on success or excessive failures.
+    Returns (is_valid: bool, error_message: str or None, http_status: int)
+    """
+    ident = identifier.strip().lower()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT id, identifier, otp_hash, psk_hash, attempts, expires_at
+            FROM pending_auth_challenges
+            WHERE LOWER(identifier) = %s AND challenge_type = %s;
+            """,
+            (ident, challenge_type)
+        )
+        row = cursor.fetchone()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        cursor.close()
+        raise e
+
+    if not row:
+        cursor.close()
+        return False, "Invalid or expired session", 401
+
+    challenge_id = row["id"]
+    attempts = row.get("attempts", 0)
+    expires_at = row["expires_at"]
+
+    now_utc = datetime.now(timezone.utc)
+    if isinstance(expires_at, datetime):
+        exp_tz = expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=timezone.utc)
+        is_expired = now_utc > exp_tz
+    elif isinstance(expires_at, (int, float)):
+        is_expired = now_utc.timestamp() > expires_at
+    else:
+        is_expired = True
+
+    if is_expired:
+        cursor.execute("DELETE FROM pending_auth_challenges WHERE id = %s;", (challenge_id,))
+        conn.commit()
+        cursor.close()
+        return False, "OTP has expired. Please initiate login again.", 401
+
+    if attempts >= 3:
+        cursor.execute("DELETE FROM pending_auth_challenges WHERE id = %s;", (challenge_id,))
+        conn.commit()
+        cursor.close()
+        return False, "Maximum verification attempts exceeded. Please login again.", 401
+
+    cand_otp_hash = hashlib.sha256(str(candidate_otp).strip().encode()).hexdigest()
+    cand_psk_hash = hashlib.sha256(str(candidate_psk).strip().encode()).hexdigest()
+
+    match_otp = hmac.compare_digest(row["otp_hash"], cand_otp_hash)
+    match_psk = hmac.compare_digest(row["psk_hash"], cand_psk_hash)
+
+    if not (match_otp and match_psk):
+        new_attempts = attempts + 1
+        if new_attempts >= 3:
+            cursor.execute("DELETE FROM pending_auth_challenges WHERE id = %s;", (challenge_id,))
+            conn.commit()
+            cursor.close()
+            return False, "Maximum verification attempts exceeded. Please login again.", 401
+        else:
+            cursor.execute("UPDATE pending_auth_challenges SET attempts = %s WHERE id = %s;", (new_attempts, challenge_id))
+            conn.commit()
+            cursor.close()
+            return False, "Invalid OTP/PSK", 401
+
+    # On success: Immediately delete verified challenge row to conserve database storage
+    cursor.execute("DELETE FROM pending_auth_challenges WHERE id = %s;", (challenge_id,))
+    conn.commit()
+    cursor.close()
+    return True, None, 200
+
 
 # Run schema initialization
 if not is_vercel:
@@ -276,8 +464,6 @@ register_admin_routes(app, pool)
 
 DETECTOR_PACKAGE_DIR = Path(__file__).resolve().parent / "detector_package"
 DETECTOR_SECRET = os.getenv("DETECTOR_SECRET")
-
-_pending_logins = {}
 OTP_EXPIRY = 3
 
 
@@ -307,60 +493,148 @@ def verify_detector_token(token):
 # Memory store for active detectors (user_id -> last_ping_datetime)
 _active_detectors = {}
 
+def send_email_via_https_api(to_email, subject, body, attachment_path=None, html_body=None):
+    """
+    Dispatches transactional email via HTTPS REST API (Port 443) using Resend or Brevo.
+    Eliminates external SDK bloat and works reliably on Render Free Tier where SMTP ports (587/465) are blocked.
+    """
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+
+    if not resend_api_key and not brevo_api_key:
+        return None  # Neither HTTPS provider configured
+
+    mail_from = os.getenv("MAIL_FROM") or os.getenv("MAIL_USER") or "no-reply@selectshans.sec"
+
+    attachment_b64 = None
+    attachment_filename = None
+    if attachment_path and os.path.exists(attachment_path):
+        try:
+            with open(attachment_path, "rb") as af:
+                attachment_b64 = base64.b64encode(af.read()).decode("utf-8")
+                attachment_filename = os.path.basename(attachment_path)
+        except Exception as e:
+            print(f"[EMAIL HTTPS] Failed to read attachment {attachment_path}: {e}")
+
+    safe_html = html_body if html_body else f"<div style='font-family:sans-serif;white-space:pre-wrap;'>{html.escape(body)}</div>"
+
+    # 1. Resend API (https://api.resend.com/emails)
+    if resend_api_key:
+        from_address = os.getenv("MAIL_FROM") or "SelectShans SOC <onboarding@resend.dev>"
+        payload = {
+            "from": from_address,
+            "to": [to_email],
+            "subject": subject,
+            "text": body,
+            "html": safe_html
+        }
+        if attachment_b64 and attachment_filename:
+            payload["attachments"] = [{
+                "filename": attachment_filename,
+                "content": attachment_b64
+            }]
+        try:
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "SelectShans-SOC-Gateway/2.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    return True
+        except Exception as err:
+            print(f"[EMAIL HTTPS] Resend API transmission failed: {err}")
+
+    # 2. Brevo API (https://api.brevo.com/v3/smtp/email)
+    if brevo_api_key:
+        sender_email = mail_from if "@" in mail_from else "no-reply@selectshans.sec"
+        payload = {
+            "sender": {"name": "SelectShans SOC", "email": sender_email},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "textContent": body,
+            "htmlContent": safe_html
+        }
+        if attachment_b64 and attachment_filename:
+            payload["attachment"] = [{
+                "name": attachment_filename,
+                "content": attachment_b64
+            }]
+        try:
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "api-key": brevo_api_key,
+                    "Content-Type": "application/json",
+                    "User-Agent": "SelectShans-SOC-Gateway/2.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    return True
+        except Exception as err:
+            print(f"[EMAIL HTTPS] Brevo API transmission failed: {err}")
+
+    return False
+
+
 def send_email_safe(to_email, subject, body, attachment_path=None, html_body=None):
-    try:
-        msg = MIMEMultipart('mixed')
-        msg['From'] = os.getenv("MAIL_USER", "no-reply@selectshans.local")
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        
-        alt_part = MIMEMultipart('alternative')
-        alt_part.attach(MIMEText(body, 'plain'))
-        if html_body:
-            alt_part.attach(MIMEText(html_body, 'html'))
-        msg.attach(alt_part)
-        
-        if attachment_path and os.path.exists(attachment_path):
-            with open(attachment_path, "rb") as attachment:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f"attachment; filename= {os.path.basename(attachment_path)}")
-            msg.attach(part)
-            
-        smtp_server = os.getenv("MAIL_HOST", "localhost")
-        smtp_port = int(os.getenv("MAIL_PORT", 25))
-        smtp_user = os.getenv("MAIL_USER")
-        smtp_pass = os.getenv("MAIL_PASS")
-        
-        # Simulated email fallback only in development
-        if APP_ENV == "development" and not smtp_pass:
-            print("Simulated Email Sent (No SMTP configured):", to_email, subject)
-            return True
-        elif not smtp_pass:
-            print("Error: SMTP credentials missing in production environment")
-            return False
-            
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        if smtp_user and smtp_pass:
+    # Precedence 1: HTTPS Transactional Email API (if BREVO_API_KEY or RESEND_API_KEY is configured)
+    https_result = send_email_via_https_api(to_email, subject, body, attachment_path, html_body)
+    if https_result is True:
+        return True
+
+    # Precedence 2: Standard SMTP (if MAIL_USER and MAIL_PASS are configured and port is reachable)
+    smtp_user = os.getenv("MAIL_USER")
+    smtp_pass = os.getenv("MAIL_PASS")
+    smtp_server = os.getenv("MAIL_HOST", "localhost")
+    smtp_port = int(os.getenv("MAIL_PORT", 587))
+
+    if smtp_user and smtp_pass:
+        try:
+            msg = MIMEMultipart('mixed')
+            msg['From'] = smtp_user
+            msg['To'] = to_email
+            msg['Subject'] = subject
+
+            alt_part = MIMEMultipart('alternative')
+            alt_part.attach(MIMEText(body, 'plain'))
+            if html_body:
+                alt_part.attach(MIMEText(html_body, 'html'))
+            msg.attach(alt_part)
+
+            if attachment_path and os.path.exists(attachment_path):
+                with open(attachment_path, "rb") as attachment:
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", f"attachment; filename= {os.path.basename(attachment_path)}")
+                msg.attach(part)
+
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=10)
             server.starttls()
             server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
+            server.send_message(msg)
+            server.quit()
+            return True
+        except Exception as e:
+            print(f"[EMAIL SMTP] SMTP execution failed: {e}")
+
+    # Precedence 3: Non-blocking console fallback (in local dev mode only; never log sensitive credentials)
+    if APP_ENV.lower() != "production":
+        safe_subj = str(subject).encode('ascii', 'replace').decode('ascii')
+        print(f"[DEV FALLBACK] Notification dispatched for {to_email} (Subject: {safe_subj})")
         return True
-    except Exception as e:
-        print(f"SMTP execution failed: {e}")
-        try:
-            safe_subj = str(subject).encode('ascii', 'replace').decode('ascii')
-            safe_body = str(body).encode('ascii', 'replace').decode('ascii')
-            print("\n=== SIMULATED EMAIL FALLBACK ===")
-            print(f"To: {to_email}")
-            print(f"Subject: {safe_subj}")
-            print(f"Body:\n{safe_body}")
-            print("================================\n")
-        except Exception:
-            pass
-        return False
+
+    return False
+
 
 # =====================================================
 # AUTH ROUTES
@@ -459,15 +733,16 @@ def login():
     otp = ''.join(secrets.choice("0123456789") for _ in range(6))
     psk = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(8))
 
-    _pending_logins[email.lower()] = {
-        "otp": otp,
-        "psk": psk,
-        "user_id": user["id"],
-        "username": user["username"],
-        "email": email,
-        "role": user_role,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY)
-    }
+    # Persist pending challenge in Supabase PostgreSQL (eliminates in-memory worker isolation)
+    challenge_conn = pool.get_connection()
+    try:
+        store_auth_challenge(challenge_conn, email, 'login', otp, psk, expiry_minutes=OTP_EXPIRY)
+    except Exception as e:
+        print(f"[AUTH] Failed to persist login challenge to PostgreSQL: {e}")
+        if APP_ENV.lower() == "production":
+            return jsonify({"error": "Failed to persist authentication challenge"}), 500
+    finally:
+        challenge_conn.close()
 
 
 
@@ -561,20 +836,14 @@ def login():
     )
     if not success:
         if APP_ENV.lower() == "production":
-            return jsonify({"error": "Failed to send OTP email. Please verify SMTP configuration."}), 503
+            return jsonify({"error": "Failed to send OTP email. Please verify SMTP/HTTPS configuration."}), 503
         else:
-            print("\n=======================================================")
-            print(f" [DEV FALLBACK] SMTP offline. Verification Code Logged:")
-            print(f" Identifier : {email}")
-            print(f" OTP        : {otp}")
-            print(f" PSK        : {psk}")
-            print("=======================================================\n")
             return jsonify({
                 "pending": True,
                 "identifier": email,
                 "dev_otp": otp,
                 "dev_psk": psk,
-                "notice": "Development mode: SMTP offline. OTP auto-filled or check terminal."
+                "notice": "Development mode: Email offline. Test credentials auto-provided for local developer testing."
             }), 200
 
     return jsonify({"pending": True, "identifier": email}), 200
@@ -583,43 +852,43 @@ def login():
 @app.route('/api/login/verify', methods=['POST'])
 def verify():
     data = request.json or {}
-    identifier = data.get("identifier", "").lower()
-    pending = _pending_logins.get(identifier)
+    identifier = (data.get("identifier") or "").strip().lower()
+    candidate_otp = str(data.get("otp", "")).strip()
+    candidate_psk = str(data.get("psk", "")).strip()
 
-    if not pending:
-        return jsonify({"error": "Invalid or expired session"}), 401
+    if not identifier:
+        return jsonify({"error": "Identifier is required"}), 400
 
-    # Strict expiration check against pending.get("expires_at") (supports datetime and epoch timestamps)
-    expires_at = pending.get("expires_at")
-    now_utc = datetime.now(timezone.utc)
-    is_expired = False
-    if not expires_at:
-        is_expired = True
-    elif isinstance(expires_at, (int, float)):
-        is_expired = now_utc.timestamp() > expires_at
-    elif isinstance(expires_at, datetime):
-        exp_tz = expires_at if expires_at.tzinfo is not None else expires_at.replace(tzinfo=timezone.utc)
-        is_expired = now_utc > exp_tz
+    conn = pool.get_connection()
+    try:
+        is_valid, err_msg, status_code = verify_auth_challenge(conn, identifier, 'login', candidate_otp, candidate_psk)
+        if not is_valid:
+            return jsonify({"error": err_msg}), status_code
 
-    if is_expired:
-        _pending_logins.pop(identifier, None)
-        return jsonify({"error": "OTP has expired. Please initiate login again."}), 401
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, username, email, role FROM users WHERE LOWER(email)=%s OR LOWER(username)=%s",
+            (identifier, identifier)
+        )
+        user = cursor.fetchone()
+        cursor.close()
+    finally:
+        conn.close()
 
-    if pending["otp"] != data.get("otp") or pending["psk"] != data.get("psk"):
-        return jsonify({"error": "Invalid OTP/PSK"}), 401
+    if not user:
+        return jsonify({"error": "User account not found"}), 404
 
-    role = pending.get("role", "user")
-    detector_token = create_detector_token(pending["user_id"], pending["email"])
-    jwt_token = create_token(pending["user_id"], pending["username"], pending["email"], role=role)
-    del _pending_logins[identifier]
+    role = user.get("role") or "user"
+    detector_token = create_detector_token(user["id"], user["email"])
+    jwt_token = create_token(user["id"], user["username"], user["email"], role=role)
 
     return jsonify({
         "message": "Login successful",
         "token": jwt_token,
         "detector_token": detector_token,
-        "user_id": pending["user_id"],
-        "username": pending["username"],
-        "email": pending["email"],
+        "user_id": user["id"],
+        "username": user["username"],
+        "email": user["email"],
         "role": role,
         "expires_in": 30 * 60  # 30 minutes in seconds
     }), 200
@@ -683,8 +952,6 @@ def api_send_email():
 # BETA LAYER ROUTES
 # =====================================================
 
-_pending_beta_logins = {}
-
 @app.route('/api/beta/login', methods=['POST'])
 @token_required
 def beta_login():
@@ -706,34 +973,24 @@ def beta_login():
         cursor = conn.cursor()
         cursor.execute("SELECT dob, shikikan_access FROM users WHERE id=%s", (current_user["user_id"],))
         user = cursor.fetchone()
+        cursor.close()
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+            
+        if not user.get("shikikan_access"):
+            return jsonify({"error": "Access Denied by Admin. Please request permission."}), 403
+            
+        int_otp = ''.join(secrets.choice("0123456789") for _ in range(4))
+        str_otp = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3))
+
+        store_auth_challenge(conn, email, 'beta', int_otp, str_otp, expiry_minutes=5)
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
         raise e
     finally:
-        try: cursor.close()
-        except: pass
         conn.close()
-
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-        
-    if not user.get("shikikan_access"):
-        return jsonify({"error": "Access Denied by Admin. Please request permission."}), 403
-        
-    int_otp = ''.join(secrets.choice("0123456789") for _ in range(4))
-    str_otp = ''.join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(3))
-
-    _pending_beta_logins[email] = {
-        "int_otp": int_otp,
-        "str_otp": str_otp,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
-    }
-
-    expected_full_code = ""
-    for i in range(3):
-        expected_full_code += int_otp[i] + str_otp[i]
-    expected_full_code += int_otp[3]
 
     success = send_email_safe(
         email,
@@ -749,32 +1006,29 @@ def beta_login():
 @token_required
 def beta_verify():
     current_user = g.user
-    data = request.json
-    interleaved_code = data.get("code", "")
+    data = request.json or {}
+    interleaved_code = str(data.get("code", "")).strip()
     email = current_user["email"].lower()
     
-    pending = _pending_beta_logins.get(email)
-    if not pending:
-        return jsonify({"error": "No pending beta login"}), 400
-        
-    if datetime.now(timezone.utc) > pending["expires_at"]:
-        del _pending_beta_logins[email]
-        return jsonify({"error": "Beta OTP expired"}), 400
+    if len(interleaved_code) != 7:
+        return jsonify({"error": "Invalid GHOST Layer Code format"}), 401
 
-    int_otp = pending["int_otp"]
-    str_otp = pending["str_otp"]
+    cand_int = interleaved_code[0] + interleaved_code[2] + interleaved_code[4] + interleaved_code[6]
+    cand_str = interleaved_code[1] + interleaved_code[3] + interleaved_code[5]
 
-    expected_interleaved = ""
-    for i in range(3):
-        expected_interleaved += int_otp[i] + str_otp[i]
-    expected_interleaved += int_otp[3]
-    
-    expected_full_code = expected_interleaved
-    
-    if interleaved_code != expected_full_code:
-        return jsonify({"error": "Invalid GHOST Layer Code"}), 401
-        
-    del _pending_beta_logins[email]
+    conn = pool.get_connection()
+    try:
+        is_valid, err_msg, status_code = verify_auth_challenge(conn, email, 'beta', cand_int, cand_str)
+        if not is_valid:
+            if "expired" in (err_msg or "").lower():
+                return jsonify({"error": "Beta OTP expired"}), 400
+            elif "not found" in (err_msg or "").lower() or "session" in (err_msg or "").lower():
+                return jsonify({"error": "No pending beta login"}), 400
+            elif "maximum" in (err_msg or "").lower():
+                return jsonify({"error": err_msg}), 400
+            return jsonify({"error": "Invalid GHOST Layer Code"}), 401
+    finally:
+        conn.close()
     
     # Generate a special beta token
     beta_token = jwt.encode(
@@ -1658,6 +1912,7 @@ def send_pdf_email(to_email, pdf_path):
 
 def send_daily_summary():
     print("Running daily summary job...")
+    prune_stale_telemetry_records(pool)
 
     conn = pool.get_connection()
     try:

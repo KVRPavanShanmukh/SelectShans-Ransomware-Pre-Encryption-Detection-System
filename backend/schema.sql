@@ -28,6 +28,22 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Pending Multi-Factor Authentication Challenges (Self-cleaning PostgreSQL storage for multi-worker HA)
+CREATE TABLE IF NOT EXISTS pending_auth_challenges (
+    id SERIAL PRIMARY KEY,
+    identifier VARCHAR(255) NOT NULL,
+    challenge_type VARCHAR(32) NOT NULL,
+    otp_hash VARCHAR(128) NOT NULL,
+    psk_hash VARCHAR(128) NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_auth_ident_type ON pending_auth_challenges (identifier, challenge_type);
+CREATE INDEX IF NOT EXISTS idx_pending_auth_expires_at ON pending_auth_challenges (expires_at);
+
+
 -- Process Whitelist (Don't kill these)
 CREATE TABLE IF NOT EXISTS process_whitelist (
     id SERIAL PRIMARY KEY,

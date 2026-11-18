@@ -83,7 +83,6 @@ function App() {
   const [userId, setUserId] = useState(null);
   const [jwtToken, setJwtToken] = useState(null);
   const [betaToken, setBetaToken] = useState(null);
-  const [tokenRefreshInterval, setTokenRefreshInterval] = useState(null);
 
   // Ping backend to track online status
   useEffect(() => {
@@ -132,42 +131,8 @@ function App() {
       }
 
       sessionStorage.setItem('user_role', decodedRole);
-      startTokenRefreshTimer(storedToken);
     }
   }, []);
-
-  // Refresh token before expiry (30 min token, refresh at 25 min)
-  const startTokenRefreshTimer = (token) => {
-    const refreshInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/token/refresh`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const newToken = data.token;
-          sessionStorage.setItem('jwtToken', newToken);
-          setJwtToken(newToken);
-          const payload = decodeJwtPayload(newToken);
-          const decodedRole = payload?.role || 'user';
-          sessionStorage.setItem('user_role', decodedRole);
-          setIsAdmin(decodedRole === 'admin');
-        } else {
-          // Token invalid, need to re-login
-          handleLogout();
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-      }
-    }, 25 * 60 * 1000); // Refresh every 25 minutes
-
-    setTokenRefreshInterval(refreshInterval);
-  };
 
   const handleLogin = (userId, token, role) => {
     sessionStorage.setItem('jwtToken', token);
@@ -191,7 +156,6 @@ function App() {
     }
     setShowAdminLogin(false);
     setIsSignup(false);
-    startTokenRefreshTimer(token);
   };
 
   const handleLogout = () => {

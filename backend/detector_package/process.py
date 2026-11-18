@@ -54,10 +54,13 @@ class ProcessAttributor:
 
         self._last_attribution_attempt = now
 
-        # Perform bounded handle search across non-system processes
+        # Perform bounded handle search across non-system processes (max 0.5s time budget)
         try:
+            start_search = time.time()
             target_norm = os.path.normcase(filepath)
             for proc in psutil.process_iter(['pid', 'name', 'exe', 'ppid', 'create_time']):
+                if time.time() - start_search > 0.5:
+                    break
                 try:
                     # Skip critical system processes to save time & avoid AccessDenied storms
                     pname = proc.info.get('name') or ''
