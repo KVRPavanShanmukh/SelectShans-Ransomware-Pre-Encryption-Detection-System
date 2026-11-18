@@ -63,22 +63,19 @@ namespace SelectShans.Endpoint.Tests
         }
 
         [Fact]
-        public void CalculateEntropy_LargeFile_IsBoundedTo8KB()
+        public void CalculateEntropy_LargeFile_LowEntropyAcrossPoints()
         {
             string path = Path.Combine(_tempDir, "large.bin");
-            // Create a file where the first 8KB is low entropy (A's), and the rest is high entropy.
-            // Since it's bounded to 8KB, the result should be low entropy.
+            // Create a large file (100KB) of low-entropy data.
+            // Tri-point sampling bounds the read to 24KB (head, middle, tail).
             using (var fs = new FileStream(path, FileMode.Create))
             {
-                fs.Write(System.Text.Encoding.ASCII.GetBytes(new string('A', 8192)));
-
-                byte[] randomData = new byte[100000];
-                new Random().NextBytes(randomData);
-                fs.Write(randomData);
+                byte[] lowData = System.Text.Encoding.ASCII.GetBytes(new string('A', 100000));
+                fs.Write(lowData);
             }
 
             double entropy = EntropyAnalyzer.CalculateEntropy(path);
-            Assert.True(entropy < 1.0, $"Entropy should be low because only the first 8KB is sampled, got {entropy}");
+            Assert.True(entropy < 1.0, $"Entropy should be low, got {entropy}");
         }
     }
 }

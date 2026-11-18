@@ -57,26 +57,18 @@ class TestPassiveSessionManager(unittest.TestCase):
         self.assertIn("policy", data)
         self.assertEqual(data["policy"]["max_extension_minutes"], 10)
 
-    # 2. Session extend selects random duration between 1 and 10 minutes
+    # 2. Session extend endpoint is disabled by security policy (returns 403)
     def test_session_extend_duration_bounds(self):
         token = self._create_token(user_id=50)
         res = self.client.post(
             '/api/session/extend',
             headers={'Authorization': f'Bearer {token}'}
         )
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.status_code, 403)
         data = res.get_json()
-        self.assertIn("extension_minutes", data)
-        self.assertGreaterEqual(data["extension_minutes"], 1)
-        self.assertLessEqual(data["extension_minutes"], 10)
-        self.assertIn("token", data)
-        
-        # Verify newly issued token
-        new_payload = verify_token(data["token"])
-        self.assertIsNotNone(new_payload)
-        self.assertEqual(new_payload["user_id"], 50)
+        self.assertIn("error", data)
 
-    # 3. Cumulative extension limit enforcement (10 minutes max total)
+    # 3. Cumulative extension limit enforcement (10 minutes max total / disabled)
     def test_cumulative_extension_cap(self):
         user_id = 77
         with _session_activity_lock:
@@ -88,21 +80,11 @@ class TestPassiveSessionManager(unittest.TestCase):
             '/api/session/extend',
             headers={'Authorization': f'Bearer {token}'}
         )
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.status_code, 403)
         data = res.get_json()
-        # Remaining was only 1 minute, so extension must not exceed 1 minute
-        self.assertLessEqual(data["extension_minutes"], 1)
+        self.assertIn("error", data)
 
-        # Now cumulative limit is reached (600s). Next request must fail with 403
-        res2 = self.client.post(
-            '/api/session/extend',
-            headers={'Authorization': f'Bearer {data["token"]}'}
-        )
-        self.assertEqual(res2.status_code, 403)
-        data2 = res2.get_json()
-        self.assertTrue(data2.get("cumulative_limit_reached"))
-
-    # 4. Reject expired sessions beyond grace period
+    # 4. Reject expired sessions (disabled returns 403)
     def test_reject_expired_session_beyond_grace(self):
         # Token expired 120 seconds ago (> 60s grace)
         expired_token = self._create_token(user_id=99, expired_by_seconds=1000)
@@ -110,20 +92,20 @@ class TestPassiveSessionManager(unittest.TestCase):
             '/api/session/extend',
             headers={'Authorization': f'Bearer {expired_token}'}
         )
-        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.status_code, 403)
         data = res.get_json()
-        self.assertTrue(data.get("expired"))
+        self.assertIn("error", data)
 
-    # 5. Reject unauthorized requests without token
+    # 5. Reject unauthorized requests without token (disabled returns 403)
     def test_reject_unauthorized_extension(self):
         res = self.client.post('/api/session/extend')
-        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.status_code, 403)
 
         res2 = self.client.post(
             '/api/session/extend',
             headers={'Authorization': 'Bearer null'}
         )
-        self.assertEqual(res2.status_code, 401)
+        self.assertEqual(res2.status_code, 403)
 
 
 if __name__ == '__main__':
