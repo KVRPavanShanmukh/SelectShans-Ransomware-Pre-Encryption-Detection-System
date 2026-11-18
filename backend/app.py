@@ -22,6 +22,9 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 from dotenv import load_dotenv
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path)
 load_dotenv()
 
 APP_ENV = os.getenv("APP_ENV", "development")
@@ -2038,6 +2041,6 @@ def run_daily_summary():
 # =====================================================
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 10000))
+    port = int(os.getenv("PORT", 5000))
     debug_mode = APP_ENV.lower() != "production"
     app.run(host="0.0.0.0", port=port, debug=debug_mode)
