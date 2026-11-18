@@ -38,3 +38,19 @@ __pycache__/
 *.sqlite*
 *.db
 
+# Text file exclusion with whitelisting of requirements
+*.txt
+!requirements.txt
+!detector_package/requirements.txt
+!backend/requirements.txt
+!backend/detector_package/requirements.txt
+
+# Binaries & archives
+*.zip
+*.exe
+bin/
+obj/
+**/bin/
+**/obj/
+
+

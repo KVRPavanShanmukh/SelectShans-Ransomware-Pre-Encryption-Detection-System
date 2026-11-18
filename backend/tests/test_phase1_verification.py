@@ -101,7 +101,7 @@ class TestPhase1Remediation(unittest.TestCase):
         # Inspect ZIP buffer
         zf = zipfile.ZipFile(io.BytesIO(response.data))
         namelist = zf.namelist()
-        for required_file in ["config.json", "detector.py", "requirements.txt", "run.bat"]:
+        for required_file in ["config.json", "detector.py", "requirements.txt", "run.bat", "gui.py"]:
             self.assertIn(required_file, namelist, f"Missing required file {required_file} in detector ZIP")
 
         # Verify injected config.json

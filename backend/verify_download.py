@@ -33,7 +33,7 @@ def verify_detector_zip():
         required_files = [
             "config.json", "detector.py", "requirements.txt", "run.bat",
             "canary.py", "engine.py", "entropy.py", "extensions.py",
-            "process.py", "risk.py", "telemetry.py"
+            "process.py", "risk.py", "telemetry.py", "gui.py"
         ]
         missing = [f for f in required_files if f not in namelist]
         
@@ -51,6 +51,14 @@ def verify_detector_zip():
             print("PASS: detector.py contains valid file monitoring logic.")
         else:
             print("FAIL: detector.py appears corrupted or incomplete.")
+            return False
+
+        # Verify gui.py content
+        gui_code = zf.read("gui.py").decode('utf-8')
+        if "tkinter" in gui_code and "FolderGuard" in gui_code:
+            print("PASS: gui.py contains valid desktop GUI implementation.")
+        else:
+            print("FAIL: gui.py appears corrupted or incomplete.")
             return False
             
         print("ALL DETECTOR DOWNLOAD CHECKS PASSED.")

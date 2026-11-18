@@ -1135,7 +1135,7 @@ def detector_download():
         if run_bat.exists():
             zf.write(run_bat, arcname="run.bat")
         else:
-            zf.writestr("run.bat", "@echo off\r\necho Starting SelectShans FolderGuard...\r\npython detector.py\r\npause\r\n")
+            zf.writestr("run.bat", "@echo off\r\necho Starting SelectShans FolderGuard...\r\nstart \"\" python gui.py\r\n")
 
     buffer.seek(0)
 

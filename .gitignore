@@ -108,5 +108,16 @@ releases/
 # Ignore compiled binaries and distribution archives
 *.exe
 *.zip
+bin/
+obj/
+**/bin/
+**/obj/
 **/publish/
 **/publish-small/
+
+# =========================
+# Text File Exclusion & Whitelist
+# =========================
+*.txt
+!backend/requirements.txt
+!backend/detector_package/requirements.txt
