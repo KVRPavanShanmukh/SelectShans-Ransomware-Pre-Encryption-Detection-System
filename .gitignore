@@ -1,122 +1,151 @@
-# =========================
-# Node / React
-# =========================
-node_modules/
-dist/
-dist-ssr/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# ============================================================
+# SelectShans - Global Git Ignore
+# ============================================================
 
 # =========================
-# Environment / Secrets
+# Documentation & Markdown Files
+# ONLY the main root README.md is allowed; ALL other .md files are excluded
+# =========================
+*.md
+**/*.md
+!/README.md
+
+# =========================
+# Environment & Secrets (STRICT)
 # =========================
 .env
 .env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 !.env.example
+*.env
+*.env.*
+
+# Secrets, Passwords, Keys, Certificates & Tokens
 *password*
 *Password*
 *credential*
 *Credential*
 *secret*.txt
 *.credentials
+*.key
+*.pem
+*.pfx
+*.p12
+*.cer
+*.crt
+*.cert
+*.token
+*token*.json
+serviceAccountKey*.json
+client_secret*.json
 
 # =========================
-# Supabase
+# Node / React
+# =========================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# =========================
+# Python & Virtual Environments
+# =========================
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+
+# =========================
+# Logs, Telemetry & Forensic Dumps
+# =========================
+logs/
+**/logs/
+*.log
+monitor.log
+sysmon*.log
+audit*.log
+*.dump
+*.sql.bak
+*.bak
+
+# =========================
+# Supabase & Local Databases
 # =========================
 .supabase/
 supabase/.branches/
 supabase/.temp/
 supabase/seed.sql.tmp
+*.db
+*.sqlite
+*.sqlite3
 
 # =========================
-# .NET / C#
+# .NET, Binaries & Archives
 # =========================
+bin/
+obj/
 **/bin/
 **/obj/
+publish/
+releases/
+**/*_publish/
+**/publish/
+**/publish-small/
+**/releases/
+*.exe
+*.dll
+*.zip
+*.tar.gz
+*.7z
+*.rar
 
+# =========================
+# IDE & Tooling
+# =========================
 .vs/
 .vscode/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
+.idea/
 
 # =========================
-# Test / Coverage
-# =========================
-TestResults/
-coverage/
-*.coverage
-*.coveragexml
-
-# =========================
-# Local application data
-# =========================
-*.db
-*.sqlite
-*.sqlite3
-
-# =========================
-# OS generated files
+# OS Generated Files & Temporary Exports
 # =========================
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# =========================
-# Temporary files
-# =========================
 *.tmp
 *.temp
-*.log
 *.pdf
 chart_*.png
 
 # =========================
-# IDE / tooling
-# =========================
-.idea/
-
-# =========================
-# Python generated files
-# =========================
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-
-# =========================
-# Build / publish output
-# =========================
-publish/
-releases/
-**/*_publish/
-**/publish/
-**/releases/
-
-# =========================
-# Local secrets / certificates
-# =========================
-*.pfx
-*.p12
-*.pem
-*.key
-
-
-# Ignore compiled binaries and distribution archives
-*.exe
-*.zip
-bin/
-obj/
-**/bin/
-**/obj/
-**/publish/
-**/publish-small/
-
-# =========================
-# Text File Exclusion & Whitelist
+# Text Files & Requirements Whitelist
 # =========================
 *.txt
 !backend/requirements.txt

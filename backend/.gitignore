@@ -1,17 +1,28 @@
-/.metadata/
-/node_modules
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# ============================================================
+# Backend - Git Ignore
+# ============================================================
 
-node_modules
-dist
-dist-ssr
+# Markdown files excluded (only root README.md is pushed)
+*.md
+**/*.md
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
+
+# Logs
+logs/
+**/logs/
+*.log
+
+# Node & dependencies
+node_modules/
+dist/
+dist-ssr/
 *.local
 
 # Editor directories and files
@@ -24,9 +35,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
-.env.*
-!.env.example
 
 # Python bytecode & caches
 __pycache__/
@@ -52,5 +60,3 @@ bin/
 obj/
 **/bin/
 **/obj/
-
-
