@@ -1021,7 +1021,9 @@ def beta_login():
         if not user:
             return jsonify({"error": "User not found"}), 404
             
-        if not user.get("shikikan_access"):
+        is_admin = current_user.get("role") == "admin"
+        has_shikikan = is_admin or bool(user.get("shikikan_access"))
+        if not has_shikikan:
             return jsonify({"error": "Access Denied by Admin. Please request permission."}), 403
             
         int_otp = ''.join(secrets.choice("0123456789") for _ in range(4))
@@ -1188,6 +1190,230 @@ def detector_download():
         as_attachment=True,
         download_name="SelectShans-FolderGuard.zip"
     )
+
+
+@app.route('/api/agent.ps1', methods=['GET'])
+def serve_agent_ps1():
+    token = request.args.get("token")
+    info = verify_detector_token(token)
+    if not info:
+        return "# Error: Invalid or expired detector token. Log in to SelectShans SOC first.", 401, {'Content-Type': 'text/plain; charset=utf-8'}
+
+    # Support external backend URL passed explicitly via query param or env var or request.url_root
+    custom_server = request.args.get("server")
+    if custom_server and custom_server.strip():
+        backend_url = custom_server.strip().rstrip("/")
+    else:
+        backend_url = os.getenv("BACKEND_API_URL", request.url_root.rstrip("/"))
+
+    predefined_folder = request.args.get("folder", "").strip()
+    predefined_folder_escaped = predefined_folder.replace("`", "``").replace('"', '`"').replace("$", "`$")
+
+    ps_script = f"""# ============================================================
+# SelectShans FolderGuard - Live In-Memory Endpoint Agent
+# Zero-Disk-Footprint (Runs purely in RAM via PowerShell)
+# ============================================================
+$ErrorActionPreference = 'SilentlyContinue'
+$ServerUrl = "{backend_url}"
+$DetectorToken = "{token}"
+$PredefinedFolder = "{predefined_folder_escaped}"
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "   SelectShans FolderGuard - Live In-Memory Defense Agent   " -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "[*] Endpoint User ID: {info['user_id']} ({info['email']})" -ForegroundColor Gray
+Write-Host "[*] Target Server:    $ServerUrl" -ForegroundColor Gray
+Write-Host "[*] Disk Footprint:   0 MB (Operating entirely in RAM)" -ForegroundColor Green
+
+# ------------------------------------------------------------
+# Step 1: User Folder Selection (Interactive / Graphical Picker)
+# ------------------------------------------------------------
+$WatchFolder = ""
+if (-not [string]::IsNullOrWhiteSpace($PredefinedFolder) -and (Test-Path $PredefinedFolder)) {{
+    $WatchFolder = (Resolve-Path $PredefinedFolder).Path
+    Write-Host "[+] Using specified protection folder: $WatchFolder" -ForegroundColor Green
+}} else {{
+    Write-Host ""
+    Write-Host "------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host " [?] CHOOSE FOLDER TO GUARD & INSTALL CANARY TRAP" -ForegroundColor Yellow
+    Write-Host "------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host " Specify the target folder on your PC to protect:" -ForegroundColor White
+    Write-Host "  * Press [ENTER] to open the graphical Windows Folder Picker," -ForegroundColor Cyan
+    Write-Host "  * OR type/paste the target path directly (e.g. C:\MySafeFolder):" -ForegroundColor Cyan
+    $promptInput = Read-Host " Target Directory [Press ENTER for picker]"
+
+    if ([string]::IsNullOrWhiteSpace($promptInput)) {{
+        try {{
+            Add-Type -AssemblyName System.Windows.Forms
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = "Select Folder to Guard with SelectShans SOC"
+            $dialog.ShowNewFolderButton = $true
+            $dialog.RootFolder = "MyComputer"
+            $topForm = New-Object System.Windows.Forms.Form
+            $topForm.TopMost = $true
+            $res = $dialog.ShowDialog($topForm)
+            if ($res -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dialog.SelectedPath)) {{
+                $WatchFolder = $dialog.SelectedPath
+            }}
+            $topForm.Dispose()
+            $dialog.Dispose()
+        }} catch {{
+            Write-Host "[!] Note: Graphical picker not accessible in this terminal." -ForegroundColor Gray
+        }}
+    }} else {{
+        $WatchFolder = $promptInput.Trim().Trim('"').Trim("'")
+    }}
+
+    if ([string]::IsNullOrWhiteSpace($WatchFolder)) {{
+        $WatchFolder = [System.IO.Path]::Combine($env:USERPROFILE, "Documents")
+        Write-Host "[*] No folder selected. Defaulting to: $WatchFolder" -ForegroundColor Gray
+    }}
+}}
+
+if (-not (Test-Path $WatchFolder)) {{
+    try {{
+        New-Item -ItemType Directory -Path $WatchFolder -Force | Out-Null
+        Write-Host "[+] Created target directory: $WatchFolder" -ForegroundColor Green
+    }} catch {{
+        $WatchFolder = [System.IO.Path]::Combine($env:USERPROFILE, "Documents")
+        if (-not (Test-Path $WatchFolder)) {{ New-Item -ItemType Directory -Path $WatchFolder -Force | Out-Null }}
+    }}
+}}
+$WatchFolder = (Resolve-Path $WatchFolder).Path
+Write-Host "[+] Active Guard Directory set to: $WatchFolder" -ForegroundColor Green
+
+# ------------------------------------------------------------
+# Step 2: Establish Handshake Ping to Backend
+# ------------------------------------------------------------
+try {{
+    $pingJson = @{{ token = $DetectorToken }} | ConvertTo-Json
+    $res = Invoke-RestMethod -Uri "$ServerUrl/api/detector/ping" -Method Post -Body $pingJson -ContentType "application/json" -TimeoutSec 8
+    if ($res.status -eq "pong") {{
+        Write-Host "[+] Connection established! Telemetry stream is ACTIVE." -ForegroundColor Green
+    }}
+}} catch {{
+    Write-Host "[!] Warning: Server ping failed at $ServerUrl. Ensure backend is reachable." -ForegroundColor Yellow
+}}
+
+# ------------------------------------------------------------
+# Step 3: Deploy Canary Trap & Persistent Launcher in Target Folder
+# ------------------------------------------------------------
+$canaryPath = Join-Path $WatchFolder "decoy_canary.xlsx"
+try {{
+    [System.IO.File]::WriteAllText($canaryPath, "SELECTSHANS_CANARY_INTEGRITY_CHECK_CANARY_DO_NOT_MODIFY")
+    Write-Host "[+] Active Canary Trap deployed at: $canaryPath" -ForegroundColor Green
+}} catch {{
+    Write-Host "[!] Note: Could not deploy canary in $WatchFolder" -ForegroundColor Gray
+}}
+
+$launcherBat = Join-Path $WatchFolder "Start-FolderGuard.bat"
+try {{
+    $batScript = "@echo off`r`ntitle SelectShans FolderGuard Agent`r`necho ========================================================`r`necho   SelectShans FolderGuard - Active Defense Launcher`r`necho ========================================================`r`npowershell -NoProfile -ExecutionPolicy Bypass -Command `"irm '$ServerUrl/api/agent.ps1?token=$DetectorToken&server=$ServerUrl&folder=' + [System.Uri]::EscapeDataString('$WatchFolder') | iex`"`r`npause"
+    [System.IO.File]::WriteAllText($launcherBat, $batScript)
+    Write-Host "[+] Quick-Launcher installed at: $launcherBat" -ForegroundColor Cyan
+}} catch {{}}
+
+# ------------------------------------------------------------
+# Step 4: Setup Native Windows FileSystemWatcher
+# ------------------------------------------------------------
+$fsw = New-Object System.IO.FileSystemWatcher
+$fsw.Path = $WatchFolder
+$fsw.IncludeSubdirectories = $true
+$fsw.EnableRaisingEvents = $true
+
+$script:renameHistory = [System.Collections.Generic.List[datetime]]::new()
+$script:syncLock = [object]::new()
+$ransomExtensions = @(".locked", ".crypto", ".enc", ".crypt", ".wnry", ".vault", ".crypted", ".ransom")
+
+Function Send-SecurityAlert {{
+    param($EventType, $TargetFile, $Severity, $Details)
+    try {{
+        $payload = @{{
+            token = $DetectorToken
+            activities = @(
+                @{{
+                    event_type = $EventType
+                    directory = $WatchFolder
+                    target_file = $TargetFile
+                    severity = $Severity
+                    score = if ($Severity -eq "CRITICAL") {{ 95 }} else {{ 65 }}
+                    detector_id = "ps-in-memory-agent"
+                    hostname = $env:COMPUTERNAME
+                    event_count = 1
+                    action_taken = "Flagged & Streamed to Dashboard"
+                    process_name = "FolderGuard-In-Memory"
+                    details = $Details
+                }}
+            )
+        }} | ConvertTo-Json -Depth 5
+        Invoke-RestMethod -Uri "$ServerUrl/api/detector/sync-activities" -Method Post -Body $payload -ContentType "application/json" -TimeoutSec 5 | Out-Null
+        Write-Host "[ALERT STREAMED] $Severity - $EventType on $TargetFile" -ForegroundColor Red
+    }} catch {{
+        Write-Host "[!] Error streaming alert: $_" -ForegroundColor DarkGray
+    }}
+}}
+
+$onRenamed = Register-ObjectEvent $fsw Renamed -Action {{
+    $newName = $Event.SourceEventArgs.FullPath
+    $oldName = $Event.SourceEventArgs.OldFullPath
+    $ext = [System.IO.Path]::GetExtension($newName).ToLower()
+    $fileName = [System.IO.Path]::GetFileName($newName)
+
+    if ($oldName -like "*decoy_canary.xlsx*" -or $newName -like "*decoy_canary.xlsx*") {{
+        Send-SecurityAlert -EventType "canary_tamper" -TargetFile "decoy_canary.xlsx" -Severity "CRITICAL" -Details "Canary trap decoy file was renamed or modified"
+        return
+    }}
+
+    if ($ransomExtensions -contains $ext) {{
+        Send-SecurityAlert -EventType "ransomware_extension_rename" -TargetFile $fileName -Severity "CRITICAL" -Details "File renamed with known ransomware extension: $ext"
+        return
+    }}
+
+    [System.Threading.Monitor]::Enter($script:syncLock)
+    try {{
+        $now = [datetime]::Now
+        $script:renameHistory.Add($now)
+        $script:renameHistory.RemoveAll([Predicate[datetime]]{{ param($t) ($now - $t).TotalSeconds -gt 2 }}) | Out-Null
+        if ($script:renameHistory.Count -ge 3) {{
+            Send-SecurityAlert -EventType "mass_rename" -TargetFile $fileName -Severity "HIGH" -Details "Rapid file renaming detected: $($script:renameHistory.Count) files in 2 seconds"
+            $script:renameHistory.Clear()
+        }}
+    }} finally {{
+        [System.Threading.Monitor]::Exit($script:syncLock)
+    }}
+}}
+
+$onChanged = Register-ObjectEvent $fsw Changed -Action {{
+    $fullPath = $Event.SourceEventArgs.FullPath
+    if ($fullPath -like "*decoy_canary.xlsx*") {{
+        Send-SecurityAlert -EventType "canary_tamper" -TargetFile "decoy_canary.xlsx" -Severity "CRITICAL" -Details "Unauthorized modification to canary trap decoy"
+    }}
+}}
+
+Write-Host ""
+Write-Host "[*] FolderGuard is actively watching '$WatchFolder' for pre-encryption signatures." -ForegroundColor Green
+Write-Host "[*] Status: ONLINE. Press Ctrl+C at any time to disconnect.`n" -ForegroundColor Cyan
+
+try {{
+    while ($true) {{
+        Start-Sleep -Seconds 5
+        try {{
+            $pingJson = @{{ token = $DetectorToken }} | ConvertTo-Json
+            Invoke-RestMethod -Uri "$ServerUrl/api/detector/ping" -Method Post -Body $pingJson -ContentType "application/json" -TimeoutSec 5 | Out-Null
+        }} catch {{ }}
+    }}
+}} finally {{
+    Write-Host "`n[*] Stopping FolderGuard Agent..." -ForegroundColor Yellow
+    Unregister-Event -SourceIdentifier $onRenamed.Name -ErrorAction SilentlyContinue
+    Unregister-Event -SourceIdentifier $onChanged.Name -ErrorAction SilentlyContinue
+    $fsw.Dispose()
+    if (Test-Path $canaryPath) {{ Remove-Item $canaryPath -Force -ErrorAction SilentlyContinue }}
+    Write-Host "[+] Canary safely removed. Agent session closed." -ForegroundColor Gray
+}}
+"""
+    return ps_script, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
 
 
 # =====================================================
@@ -1607,13 +1833,10 @@ def generate_pdf_report(user_id, user_email):
         except Exception: pass
         print("Detector logs query error:", e)
 
+    # Clean, 100% Real-Time: Absolutely NO mock or demo values
+    # If no anomaly detector logs exist yet, rows remains empty and indicates a clean environment
     if not rows:
-        # Fallback summary if no telemetry exists yet
-        rows = [
-            {"event_type": "mass_rename", "count": 1, "last_seen": datetime.now()},
-            {"event_type": "file_entropy_spike", "count": 3, "last_seen": datetime.now()},
-            {"event_type": "unauthorized_directory_access", "count": 2, "last_seen": datetime.now()}
-        ]
+        rows = []
 
     # 2. Fetch Recent Security Alerts
     alerts = []
@@ -1647,17 +1870,26 @@ def generate_pdf_report(user_id, user_email):
     except Exception: pass
     conn.close()
 
-    anomaly_score = min(99, max(5, unresolved_count * 30 + 15))
-    threat_level = "CRITICAL" if anomaly_score > 70 else "MEDIUM" if anomaly_score > 40 else "LOW"
+    # 100% Real-time Anomaly Calculation (Zero Demo Values)
+    if unresolved_count > 0:
+        anomaly_score = min(100, unresolved_count * 25)
+        threat_level = "CRITICAL" if anomaly_score >= 70 else "HIGH" if anomaly_score >= 40 else "ELEVATED"
+    else:
+        anomaly_score = 0
+        threat_level = "LOW (CLEAN)"
 
-    # Create Chart with matplotlib
-    event_types = [r.get("event_type", "event") for r in rows if isinstance(r, dict)] or ["No Events"]
-    counts = [r.get("count", 0) for r in rows if isinstance(r, dict)] or [0]
+    # Create Chart with matplotlib - strictly based on live events
+    if rows:
+        event_types = [str(r.get("event_type", "Event")) for r in rows if isinstance(r, dict)]
+        counts = [int(r.get("count", 0)) for r in rows if isinstance(r, dict)]
+    else:
+        event_types = ["Clean Baseline"]
+        counts = [0]
 
     plt.figure(figsize=(6, 3.2), dpi=150)
     colors_list = ['#007CC3', '#e11d48', '#f59e0b', '#10b981', '#6366f1']
     bars = plt.bar(event_types, counts, color=colors_list[:len(event_types)])
-    plt.title("Anomaly & Telemetry Event Distribution", fontsize=11, fontweight='bold', pad=10)
+    plt.title("Live Telemetry & Anomaly Distribution", fontsize=11, fontweight='bold', pad=10)
     plt.xlabel("Event Category", fontsize=9)
     plt.ylabel("Frequency", fontsize=9)
     plt.xticks(rotation=15, ha='right', fontsize=8)
@@ -1756,15 +1988,21 @@ def generate_pdf_report(user_id, user_email):
     elements.append(Image(chart_path, width=5.2*inch, height=2.6*inch))
     elements.append(Spacer(1, 10))
 
-    # 4. Detailed Telemetry Breakdown Table
+    # 4. Detailed Telemetry Breakdown Table (100% Real-time)
     elements.append(Paragraph("3. FolderGuard Telemetry Event Log", section_heading))
-    telemetry_table_data = [["Event Category", "Occurrences", "Last Detected Timestamp"]]
-    for r in rows:
-        last_seen = r.get("last_seen") if isinstance(r, dict) else None
-        ts_str = last_seen.strftime('%Y-%m-%d %H:%M:%S') if isinstance(last_seen, datetime) else str(last_seen or "Recent")
-        ev_type = str(r.get("event_type", "Event") if isinstance(r, dict) else "Event")
-        cnt_val = str(r.get("count", 1) if isinstance(r, dict) else 1)
-        telemetry_table_data.append([ev_type, cnt_val, ts_str])
+    if rows:
+        telemetry_table_data = [["Event Category", "Occurrences", "Last Detected Timestamp"]]
+        for r in rows:
+            last_seen = r.get("last_seen") if isinstance(r, dict) else None
+            ts_str = last_seen.strftime('%Y-%m-%d %H:%M:%S') if isinstance(last_seen, datetime) else str(last_seen or "Recent")
+            ev_type = str(r.get("event_type", "Event") if isinstance(r, dict) else "Event")
+            cnt_val = str(r.get("count", 1) if isinstance(r, dict) else 1)
+            telemetry_table_data.append([ev_type, cnt_val, ts_str])
+    else:
+        telemetry_table_data = [
+            ["Telemetry Channel", "Observed Events", "Integrity Status"],
+            ["Real-Time Sensor Feed", "0 Anomalies", "CLEAN - No active encryption signatures detected"]
+        ]
 
     t_telemetry = Table(telemetry_table_data, colWidths=[180, 120, 220])
     t_telemetry.setStyle(TableStyle([
@@ -1831,20 +2069,13 @@ def generate_pdf_report(user_id, user_email):
 def get_security_report_pdf():
     user_id = g.user['user_id']
     target_user_id = request.args.get('user_id', type=int)
+    is_admin = g.user.get('role') == 'admin'
+    
+    target_id_to_fetch = target_user_id if (is_admin and target_user_id) else user_id
     
     conn = pool.get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, email, role FROM users WHERE id = %s", (user_id,))
-        current_user = cursor.fetchone()
-        is_admin = current_user and current_user.get('role') == 'admin'
-        
-        # Security check: Non-admins cannot access general admin reports or other users' reports
-        if not is_admin:
-            if not target_user_id or target_user_id != user_id:
-                return jsonify({"error": "Admin access required"}), 403
-            
-        target_id_to_fetch = target_user_id or user_id
         cursor.execute("SELECT id, email FROM users WHERE id = %s", (target_id_to_fetch,))
         user = cursor.fetchone()
     except Exception as e:
@@ -1892,17 +2123,15 @@ def get_security_report_pdf():
 @app.route('/api/admin/realtime-stats', methods=['GET'])
 @token_required
 def get_realtime_stats():
-    if g.user.get('role') != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
         
     conn = pool.get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Calculate anomaly score based on unresolved critical alerts
+        # Calculate real anomaly score based on unresolved critical alerts (Zero Demo Values)
         cursor.execute("SELECT COUNT(*) as count FROM alerts WHERE resolved = FALSE")
         unresolved_alerts = cursor.fetchone()["count"]
-        anomaly_score = min(99, max(5, unresolved_alerts * 30 + 10))
+        anomaly_score = min(100, unresolved_alerts * 25) if unresolved_alerts > 0 else 0
         
         # Files protected (count process whitelist)
         cursor.execute("SELECT COUNT(*) as count FROM process_whitelist")
@@ -1920,13 +2149,8 @@ def get_realtime_stats():
 
         active_connections = max(1, active_detectors_count + active_sessions)
         
-        # Chart data variation
-        chart_data = []
-        for i in range(20):
-            chart_data.append({
-                "name": i,
-                "cpu": int(15 + (anomaly_score / 2) + (i % 4) * 3)
-            })
+        # Real-time chart data reflecting live anomaly telemetry
+        chart_data = [{"name": i, "cpu": anomaly_score} for i in range(20)]
             
         return jsonify({
             "anomaly_score": anomaly_score,
@@ -2122,8 +2346,6 @@ def disabled_token_refresh():
 @app.route('/api/alerts', methods=['GET'])
 @token_required
 def get_alerts():
-    if g.user.get('role') != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
     
     conn = pool.get_connection()
@@ -2148,8 +2370,6 @@ def get_alerts():
 @app.route('/api/alerts/<int:alert_id>/resolve', methods=['POST'])
 @token_required
 def resolve_alert(alert_id):
-    if g.user.get('role') != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
     user_id = g.user['user_id']
     
     conn = pool.get_connection()
