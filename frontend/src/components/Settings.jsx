@@ -428,7 +428,7 @@ const Settings = ({ detectorToken, apiBase = '', userId, onNavigate }) => {
                                 </button>
                             </div>
                             {!detectorToken && (
-                                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Log in with your account (credentials step) to get a download link. Security-question-only login does not include detector token.</p>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Log in with your verified credentials to access the agent detector download.</p>
                             )}
                         </div>
                     </section>

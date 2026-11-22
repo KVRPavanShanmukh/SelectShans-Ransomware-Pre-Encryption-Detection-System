@@ -92,20 +92,20 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
 
   // Filter out system admins for normal endpoint topology & permission view
   const standardUsers = useMemo(() => {
-    return users.filter((u) => u.role !== 'admin');
+    return (Array.isArray(users) ? users : []).filter((u) => u && u.role !== 'admin');
   }, [users]);
 
   // Derived KPI Counts
   const requestedUsers = useMemo(() => {
-    return standardUsers.filter((u) => u.shikikan_requested && !u.shikikan_access);
+    return standardUsers.filter((u) => u && u.shikikan_requested && !u.shikikan_access);
   }, [standardUsers]);
 
   const verifiedUsers = useMemo(() => {
-    return standardUsers.filter((u) => u.shikikan_access);
+    return standardUsers.filter((u) => u && u.shikikan_access);
   }, [standardUsers]);
 
   const onlineEndpoints = useMemo(() => {
-    return standardUsers.filter((u) => u.is_online);
+    return standardUsers.filter((u) => u && u.is_online);
   }, [standardUsers]);
 
   // Search & Tab filtered dataset
@@ -121,9 +121,10 @@ const AdminDashboard = ({ jwtToken, onSwitchToThreatConsole, onLogout }) => {
     const q = searchQuery.toLowerCase().trim();
     return dataset.filter(
       (u) =>
-        (u.username && u.username.toLowerCase().includes(q)) ||
+        u &&
+        ((u.username && u.username.toLowerCase().includes(q)) ||
         (u.email && u.email.toLowerCase().includes(q)) ||
-        (u.dob && String(u.dob).includes(q))
+        (u.dob && String(u.dob).includes(q)))
     );
   }, [standardUsers, requestedUsers, verifiedUsers, activeTab, searchQuery]);
 

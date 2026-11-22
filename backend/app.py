@@ -157,34 +157,80 @@ class ResilientPostgresPool:
         self.sslmode = sslmode
         self.is_vercel = is_vercel_env
         self._pool = None
+        self._last_error = None
         self._init_pool()
+
+    def _get_candidate_dsns(self):
+        if not self.dsn:
+            return []
+        candidates = [self.dsn]
+        try:
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(self.dsn)
+            hostname = parsed.hostname or ""
+            # If Supabase pooler on 5432, also try port 6543 (transaction mode pooler)
+            if "pooler.supabase.com" in hostname and parsed.port == 5432:
+                p6543 = parsed._replace(netloc=parsed.netloc.replace(":5432", ":6543"))
+                candidates.append(urlunparse(p6543))
+
+            # Also try direct connection db.<project-ref>.supabase.co:5432
+            if "pooler.supabase.com" in hostname and parsed.username and "." in parsed.username:
+                user_parts = parsed.username.split(".", 1)
+                if user_parts[0] == "postgres" and len(user_parts) > 1:
+                    project_ref = user_parts[1]
+                    pwd_part = f":{parsed.password}" if parsed.password else ""
+                    direct_netloc = f"postgres{pwd_part}@db.{project_ref}.supabase.co:5432"
+                    direct_url = parsed._replace(netloc=direct_netloc)
+                    candidates.append(urlunparse(direct_url))
+        except Exception:
+            pass
+        return candidates
 
     def _init_pool(self):
         if not self.dsn:
             print("[WARN] PostgreSQL connection pool deferred (DATABASE_URL not set in environment)")
             self._pool = None
+            self._last_error = "DATABASE_URL is not set in environment or .env"
             return
 
-        try:
-            pool_kwargs = {
-                "minconn": 1,
-                "maxconn": 1 if self.is_vercel else 5,
-                "dsn": self.dsn
-            }
-            if "sslmode=" not in self.dsn:
-                pool_kwargs["sslmode"] = self.sslmode
+        candidates = self._get_candidate_dsns()
+        last_exc = None
 
-            self._pool = pg_pool.ThreadedConnectionPool(**pool_kwargs)
-            print("Supabase PostgreSQL pool ready.")
-        except Exception as e:
-            print(f"[WARN] PostgreSQL connection pool deferred (PostgreSQL offline or unreachable: {e})")
-            self._pool = None
+        for candidate in candidates:
+            try:
+                pool_kwargs = {
+                    "minconn": 1,
+                    "maxconn": 1 if self.is_vercel else 5,
+                    "dsn": candidate
+                }
+                if "sslmode=" not in candidate:
+                    pool_kwargs["sslmode"] = self.sslmode
+
+                new_pool = pg_pool.ThreadedConnectionPool(**pool_kwargs)
+                # Verify pool connectivity
+                test_conn = new_pool.getconn()
+                new_pool.putconn(test_conn)
+                self._pool = new_pool
+                self._last_error = None
+                print("Supabase PostgreSQL pool ready.")
+                return
+            except Exception as e:
+                last_exc = e
+
+        self._pool = None
+        self._last_error = str(last_exc)
+        print(f"[WARN] PostgreSQL connection pool deferred (PostgreSQL offline or unreachable: {last_exc})")
 
     def get_connection(self):
         if self._pool is None and self.dsn:
             self._init_pool()
         if self._pool is None:
-            raise RuntimeError("Database connection unavailable. Please ensure DATABASE_URL is configured in your environment or .env file.")
+            err_detail = f": {self._last_error}" if self._last_error else ""
+            raise RuntimeError(
+                f"Database connection unavailable{err_detail}. "
+                "If using Supabase, please verify that your project is not PAUSED in the Supabase Dashboard "
+                "(free projects pause after 7 days of inactivity), and ensure your network can reach Supabase."
+            )
         raw_conn = self._pool.getconn()
         return PooledConnectionWrapper(raw_conn, self._pool)
 
@@ -644,8 +690,7 @@ def send_email_safe(to_email, subject, body, attachment_path=None, html_body=Non
 def signup():
     data = request.json
 
-    if not all([data.get("username"), data.get("email"),
-                data.get("password"), data.get("sec_q"), data.get("sec_a")]):
+    if not all([data.get("username"), data.get("email"), data.get("password")]):
         return jsonify({"error": "All fields required"}), 400
 
     import re
@@ -667,15 +712,13 @@ def signup():
 
         try:
             cursor.execute("""
-                INSERT INTO users (username, password_hash, email, sec_q, sec_a_hash)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (username, password_hash, email)
+                VALUES (%s, %s, %s)
                 RETURNING id
             """, (
                 norm_username,
                 generate_password_hash(data["password"]),
-                norm_email,
-                data.get("sec_q"),
-                generate_password_hash(data["sec_a"]) if data.get("sec_a") else None
+                norm_email
             ))
             _ = cursor.fetchone()
             conn.commit()

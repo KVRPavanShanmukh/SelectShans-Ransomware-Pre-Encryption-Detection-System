@@ -29,21 +29,19 @@ const SessionManager = ({ jwtToken, onLogout }) => {
   const resolveExpiryEpoch = () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const maxAllowedEpoch = nowSec + MAX_SESSION_SECONDS;
-    const token = jwtToken || localStorage.getItem('jwtToken');
+    const token = jwtToken || sessionStorage.getItem('jwtToken') || localStorage.getItem('jwtToken');
     const tokenExp = parseJwtExp(token);
 
-    if (tokenExp) {
+    if (tokenExp && tokenExp > nowSec) {
       return Math.min(tokenExp, maxAllowedEpoch);
     }
 
-    const savedExpiry = localStorage.getItem('session_expires_at_epoch');
-    if (savedExpiry) {
-      const parsed = parseInt(savedExpiry, 10);
-      if (!Number.isNaN(parsed)) return Math.min(parsed, maxAllowedEpoch);
-    }
-
-    localStorage.setItem('session_expires_at_epoch', maxAllowedEpoch.toString());
-    return maxAllowedEpoch;
+    // Default to fresh 10-minute session from right now
+    const freshExpiry = maxAllowedEpoch;
+    try {
+      sessionStorage.setItem('session_expires_at_epoch', freshExpiry.toString());
+    } catch (e) {}
+    return freshExpiry;
   };
 
   const [expiryEpoch, setExpiryEpoch] = useState(resolveExpiryEpoch);

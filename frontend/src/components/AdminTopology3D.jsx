@@ -169,6 +169,10 @@ const AdminTopology3D = ({
     });
   };
 
+  const handleResetCamera = () => {
+    applyPresetView('iso');
+  };
+
   // Listen to external fly-to requests from parent table
   useEffect(() => {
     if (flyToUserId && nodesMapRef.current.has(flyToUserId)) {

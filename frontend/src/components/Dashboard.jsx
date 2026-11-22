@@ -59,7 +59,9 @@ const Dashboard = ({ userId, apiBase = '' }) => {
         const res = await fetch(`${apiBase}/api/admin/realtime-stats?user_id=${storedUserId}`, { headers });
         if (res.ok) {
           const data = await res.json();
-          setChartData(data.chart_data);
+          if (Array.isArray(data.chart_data)) {
+            setChartData(data.chart_data);
+          }
           setAnomalyScore(data.anomaly_score);
           setNetConns(data.active_connections);
           setFilesProtected(data.files_protected);
